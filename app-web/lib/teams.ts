@@ -34,6 +34,13 @@ const TEAMS: TeamConfig[] = [
     driveRootFolderId: process.env.GM_DRIVE_ROOT_FOLDER_ID ?? "",
     members: ["gorawit@tdfb.co", "sirirat@tdfb.co", "napat@tdfb.co"],
   },
+  {
+    key: "hr",
+    name: "Human Resources (HR)",
+    sheetId: process.env.HR_SHEET_ID ?? "",
+    driveRootFolderId: process.env.HR_DRIVE_ROOT_FOLDER_ID ?? "",
+    members: ["wiparat@tdfb.co", "naruemol@tdfb.co", "nattapon@tdfb.co"],
+  },
   // Add the next team here, e.g.:
   // {
   //   key: "marketing",
