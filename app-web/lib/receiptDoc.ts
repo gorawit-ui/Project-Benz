@@ -334,7 +334,7 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
 
     para(
       [
-        run("ข้าพเจ้า นาย / นางสาว / นาง "),
+        run("ข้าพเจ้า "),
         run(data.payeeName),
         run("     เลขประจำตัวประชาชน "),
         run(data.idNumber),
