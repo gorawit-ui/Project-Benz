@@ -49,6 +49,23 @@ function widthDxa(twips: number) {
   return { size: Math.max(1, Math.round(twips)), type: WidthType.DXA };
 }
 
+/**
+ * Splits `targetWidth - text.length` dot characters evenly around `text`,
+ * so a short value (e.g. a short name) reads as "centered in a dotted
+ * field" while a value at or past targetWidth just gets the minimum on
+ * each side — never negative, never a jarring wall of dots for a long
+ * value. Used to give filled-in values (name, amount) breathing room from
+ * the surrounding label text instead of sitting flush against it.
+ */
+function dotPadding(text: string, targetWidth: number, minPerSide = 2): { left: string; right: string } {
+  const totalPad = Math.max(minPerSide * 2, targetWidth - text.length);
+  const left = Math.floor(totalPad / 2);
+  const right = totalPad - left;
+  return { left: ".".repeat(left), right: ".".repeat(right) };
+}
+
+const DOT_PADDING_COLOR = "999999";
+
 // A right tab stop at the page's right margin with a dot leader — appending
 // a "\t" run after a short line's real content stretches it out to the
 // margin with dots filling the gap, so a one-line paragraph still visually
@@ -333,6 +350,8 @@ function mimeToDocxImageType(mimeType?: string): "png" | "jpg" {
 export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise<Buffer> {
   const amountText = numberToThaiBahtText(data.amountNumber);
   const amountNumberText = data.amountNumber.toFixed(2);
+  const namePad = dotPadding(data.payeeName, 24);
+  const amountPad = dotPadding(amountNumberText, 14);
   const idCardImage = data.idCardImageBuffer
     ? { buffer: data.idCardImageBuffer, type: mimeToDocxImageType(data.idCardImageMimeType) }
     : undefined;
@@ -352,7 +371,9 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
     para(
       [
         run("ข้าพเจ้า "),
+        run(namePad.left, { color: DOT_PADDING_COLOR }),
         run(data.payeeName, { underline: {} }),
+        run(namePad.right, { color: DOT_PADDING_COLOR }),
         run("\t     เลขประจำตัวประชาชน "),
         run(data.idNumber, { underline: {} }),
       ],
@@ -371,7 +392,9 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
     para(
       [
         run("เป็นจำนวนเงิน "),
+        run(amountPad.left, { color: DOT_PADDING_COLOR }),
         run(amountNumberText, { underline: {} }),
+        run(amountPad.right, { color: DOT_PADDING_COLOR }),
         run(" บาท ("),
         run(amountText, { underline: {} }),
         run(")"),
