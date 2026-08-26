@@ -24,9 +24,22 @@ import {
   type IRunOptions,
   type ParagraphChild,
 } from "docx";
+import fs from "node:fs";
+import path from "node:path";
 import { numberToThaiBahtText } from "./thaiBahtText";
 
 const FONT = "TH Sarabun New";
+
+// Real TDFB logo (square JPEG) — falls back to a "[TDFB LOGO]" placeholder
+// paragraph if the asset is ever missing, so a bad deploy never crashes doc
+// generation outright.
+const LOGO_PATH = path.join(process.cwd(), "assets", "tdfb-logo.jpg");
+let logoBuffer: Buffer | null = null;
+try {
+  logoBuffer = fs.readFileSync(LOGO_PATH);
+} catch {
+  logoBuffer = null;
+}
 
 function run(text: string, opts: Partial<Omit<IRunOptions, "text">> = {}) {
   return new TextRun({ text, font: FONT, size: 30, ...opts });
@@ -103,14 +116,28 @@ function buildHeaderTable() {
             width: { size: 22, type: WidthType.PERCENTAGE },
             borders: noBorder(),
             verticalAlign: VerticalAlign.CENTER,
-            children: [
-              dashedBox([
-                para([run("[TDFB LOGO]", { size: 20, color: "999999", italics: true })], {
-                  alignment: AlignmentType.CENTER,
-                  spacing: { after: 0 },
-                }),
-              ]),
-            ],
+            children: logoBuffer
+              ? [
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 0 },
+                    children: [
+                      new ImageRun({
+                        type: "jpg",
+                        data: logoBuffer,
+                        transformation: { width: 90, height: 90 },
+                      }),
+                    ],
+                  }),
+                ]
+              : [
+                  dashedBox([
+                    para([run("[TDFB LOGO]", { size: 20, color: "999999", italics: true })], {
+                      alignment: AlignmentType.CENTER,
+                      spacing: { after: 0 },
+                    }),
+                  ]),
+                ],
           }),
           new TableCell({
             width: { size: 78, type: WidthType.PERCENTAGE },
