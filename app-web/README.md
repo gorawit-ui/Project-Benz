@@ -78,6 +78,27 @@ npm run dev
 
 Visit `http://localhost:3000` — you'll be redirected to `/login` if not signed in.
 
+## Deploy to Vercel
+
+Plan: deploy on **Vercel** now for the GM pilot; migrate to **Google Cloud Run** in September once the app is functionally complete (see note at the end of this section — nothing here locks the code into Vercel-only APIs, so that move is a hosting change, not a rewrite).
+
+1. **Push to GitHub** — already done, this repo (`gorawit-ui/Project-Benz`) is the source.
+2. **Vercel → Add New Project → Import** this GitHub repo.
+3. **Root Directory — the one setting that's easy to miss**: this repo has `app-web/` as a subfolder, not the Next.js app at the repo root. In the import screen (or later under Project Settings → General → Root Directory), set it to `app-web`. Framework Preset auto-detects as Next.js once that's set.
+4. **Environment Variables** (Project Settings → Environment Variables) — add everything from `.env.example` *except* `NEXTAUTH_URL` for now:
+   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+   - `NEXTAUTH_SECRET`
+   - `GM_SHEET_ID`, `GM_DRIVE_ROOT_FOLDER_ID`
+5. **Deploy.** Vercel assigns a URL like `https://project-benz.vercel.app` (or set a custom domain under Project Settings → Domains first, if one is ready).
+6. **Register that URL with Google OAuth** — back in Google Cloud Console → Credentials → your OAuth client → Authorized redirect URIs, add:
+   `https://<your-vercel-url>/api/auth/callback/google`
+7. **Set `NEXTAUTH_URL`** in Vercel's env vars to `https://<your-vercel-url>` (no trailing slash), then redeploy (Deployments → ⋯ → Redeploy) so it picks up the new var.
+8. **Test sign-in** with one of the 3 configured GM emails (`lib/teams.ts`) — anyone else should be turned away per [Team routing](#team-routing).
+
+**Plan note (commercial use):** Vercel's free **Hobby** tier is licensed for personal/non-commercial projects — for an internal company tool, the **Pro** plan (~$20/mo/seat) is the correct one to be compliant with Vercel's terms.
+
+**Cloud Run migration (September, after the app is functionally complete):** this app doesn't use any Vercel-only primitive (no Edge Config, no Vercel KV, no Vercel Blob) — it's a standard Next.js app, so the move is: containerize with a `Dockerfile` (Next.js's official [standalone output](https://nextjs.org/docs/app/api-reference/next-config-js/output) mode is the usual approach), push to Artifact Registry, deploy to Cloud Run, carry over the same env vars, and re-point the OAuth client's authorized redirect URI at the new URL. Not done yet — deliberately deferred, see the plan above.
+
 ## What's implemented
 
 - **Auth**: Google sign-in via NextAuth v4, restricted to `@tdfb.co` AND to configured team members only, requesting Sheets + Drive scopes, access token persisted on the session (`lib/auth.ts`, `types/next-auth.d.ts`).
