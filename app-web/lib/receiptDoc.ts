@@ -17,6 +17,7 @@ import {
   Paragraph,
   Table,
   TableCell,
+  TableLayoutType,
   TableRow,
   TabStopPosition,
   TabStopType,
@@ -132,6 +133,7 @@ function ruleLine() {
   const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
   return new Table({
     width: widthDxa(CONTENT_WIDTH),
+    layout: TableLayoutType.FIXED,
     rows: [
       new TableRow({
         children: [
@@ -155,6 +157,7 @@ function dashedBorder() {
 function dashedBox(cellChildren: Paragraph[], widthTwips: number = CONTENT_WIDTH) {
   return new Table({
     width: widthDxa(widthTwips),
+    layout: TableLayoutType.FIXED,
     rows: [
       new TableRow({
         children: [
@@ -177,6 +180,7 @@ const HEADER_TEXT_WIDTH = CONTENT_WIDTH - HEADER_LOGO_WIDTH;
 function buildHeaderTable() {
   return new Table({
     width: widthDxa(CONTENT_WIDTH),
+    layout: TableLayoutType.FIXED,
     borders: noBorder(),
     rows: [
       new TableRow({
@@ -242,6 +246,7 @@ const DATE_BOX_WIDTH = CONTENT_WIDTH - DATE_SPACER_WIDTH;
 function buildDateTable(dateText: string) {
   return new Table({
     width: widthDxa(CONTENT_WIDTH),
+    layout: TableLayoutType.FIXED,
     borders: noBorder(),
     rows: [
       new TableRow({
@@ -287,6 +292,7 @@ function buildFooterTable(payeeName: string, idCardImage?: { buffer: Buffer; typ
   const photoNode = buildIdPhotoCellContent(idCardImage);
   return new Table({
     width: widthDxa(CONTENT_WIDTH),
+    layout: TableLayoutType.FIXED,
     borders: noBorder(),
     rows: [
       new TableRow({
