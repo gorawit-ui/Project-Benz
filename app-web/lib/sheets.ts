@@ -92,8 +92,14 @@ export const COLUMN_HEADERS = [
   "หมายเหตุ",
 ] as const;
 
-// Matches ws.title in templates/sheet/build_expense_tracking_sheet.py.
-const SHEET_TAB_NAME = "Expense Tracking";
+// Matches ws.title in templates/sheet/build_expense_tracking_sheet.py. This
+// is the STRUCTURAL TEMPLATE tab — every team's Google Sheet has exactly one
+// tab with this literal title, containing rows 1-6 (title/instructions/group
+// headers/column headers/example row) and no real data. Each calendar
+// month's real expense rows live in their OWN tab (see ensureMonthTabExists
+// below), duplicated from this template the first time something is written
+// for that month — this constant is never used as a data tab name itself.
+const TEMPLATE_TAB_NAME = "Expense Tracking";
 // In the template file, rows 1-6 are title/subtitle/group headers/column
 // headers/example row (see build_expense_tracking_sheet.py: group_row=4,
 // header_row=5, example_row=6) — real data starts at row 7. If a production
@@ -201,16 +207,83 @@ export function generateExpenseId(): string {
   return `EX-${Date.now().toString(36).toUpperCase()}`;
 }
 
-/** Appends one expense row to the end of the Expense Tracking table. */
+/**
+ * Ensures a tab titled exactly `monthTabName` exists in the spreadsheet,
+ * creating it (as a duplicate of the TEMPLATE_TAB_NAME tab) if it doesn't
+ * yet. No-op if the tab already exists. This is how each calendar month
+ * gets its own tab, mirroring lib/drive.ts's per-month Drive folder — the
+ * duplicated tab carries over rows 1-6 (title/instructions/headers/example)
+ * from the template, which is fine since DATA_START_ROW = 7 means the
+ * example row is never read as real data.
+ */
+export async function ensureMonthTabExists(
+  accessToken: string,
+  sheetId: string,
+  monthTabName: string
+): Promise<void> {
+  const sheets = sheetsClient(accessToken);
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: sheetId,
+    fields: "sheets.properties(sheetId,title,index)",
+  });
+  const allSheets = meta.data.sheets ?? [];
+
+  const alreadyExists = allSheets.some((s) => s.properties?.title === monthTabName);
+  if (alreadyExists) return;
+
+  const template = allSheets.find((s) => s.properties?.title === TEMPLATE_TAB_NAME);
+  const templateSheetId = template?.properties?.sheetId;
+  if (templateSheetId === undefined || templateSheetId === null) {
+    throw new Error('ไม่พบแท็บต้นแบบ "Expense Tracking" ในไฟล์ Google Sheet — สร้างแท็บเดือนใหม่ไม่ได้');
+  }
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: sheetId,
+    requestBody: {
+      requests: [
+        {
+          duplicateSheet: {
+            sourceSheetId: templateSheetId,
+            insertSheetIndex: allSheets.length,
+            newSheetName: monthTabName,
+          },
+        },
+      ],
+    },
+  });
+}
+
+/**
+ * Lists every per-month data tab name in the spreadsheet (i.e. every tab
+ * except TEMPLATE_TAB_NAME), sorted most-recent-first. String-sort
+ * descending works correctly here because the label format
+ * "<YYYY>-<MM> <name>" (see lib/month.ts) is a fixed-width, zero-padded
+ * sortable prefix.
+ */
+export async function listMonthTabNames(accessToken: string, sheetId: string): Promise<string[]> {
+  const sheets = sheetsClient(accessToken);
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: sheetId,
+    fields: "sheets.properties(sheetId,title,index)",
+  });
+  const allSheets = meta.data.sheets ?? [];
+  return allSheets
+    .map((s) => s.properties?.title)
+    .filter((title): title is string => !!title && title !== TEMPLATE_TAB_NAME)
+    .sort((a, b) => b.localeCompare(a));
+}
+
+/** Appends one expense row to the end of the given month tab's table. */
 export async function appendExpenseRow(
   accessToken: string,
   sheetId: string,
+  tabName: string,
   row: ExpenseRow
 ): Promise<void> {
   const sheets = sheetsClient(accessToken);
   await sheets.spreadsheets.values.append({
     spreadsheetId: sheetId,
-    range: `'${SHEET_TAB_NAME}'!A1:${LAST_COLUMN_LETTER}1`,
+    range: `'${tabName}'!A1:${LAST_COLUMN_LETTER}1`,
     valueInputOption: "USER_ENTERED",
     insertDataOption: "INSERT_ROWS",
     requestBody: {
@@ -219,15 +292,16 @@ export async function appendExpenseRow(
   });
 }
 
-/** Reads every expense row currently in the sheet. */
+/** Reads every expense row currently in the given month tab. */
 export async function listExpenseRows(
   accessToken: string,
-  sheetId: string
+  sheetId: string,
+  tabName: string
 ): Promise<ExpenseRow[]> {
   const sheets = sheetsClient(accessToken);
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: sheetId,
-    range: `'${SHEET_TAB_NAME}'!A${DATA_START_ROW}:${LAST_COLUMN_LETTER}`,
+    range: `'${tabName}'!A${DATA_START_ROW}:${LAST_COLUMN_LETTER}`,
   });
 
   const rows = res.data.values ?? [];
@@ -243,12 +317,13 @@ export async function listExpenseRows(
 async function findRowNumberById(
   sheets: sheets_v4.Sheets,
   sheetId: string,
+  tabName: string,
   rowId: string
 ): Promise<number | null> {
   const idColumnLetter = columnIndexToLetter(COLUMN_INDEX.id);
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: sheetId,
-    range: `'${SHEET_TAB_NAME}'!${idColumnLetter}${DATA_START_ROW}:${idColumnLetter}`,
+    range: `'${tabName}'!${idColumnLetter}${DATA_START_ROW}:${idColumnLetter}`,
   });
   const ids = res.data.values ?? [];
   const offset = ids.findIndex((r) => r && r[0] === rowId);
@@ -259,17 +334,19 @@ async function findRowNumberById(
 /**
  * Updates a row's status (and optionally reviewer/date/note), matched by
  * "รหัสรายการ" (rowId) rather than by array position, since sheet rows can
- * be reordered/filtered by users.
+ * be reordered/filtered by users. `tabName` identifies which month tab the
+ * row lives in.
  */
 export async function updateExpenseRowStatus(
   accessToken: string,
   sheetId: string,
+  tabName: string,
   rowId: string,
   status: ExpenseStatus,
   reviewer?: { reviewedBy?: string; note?: string }
 ): Promise<void> {
   const sheets = sheetsClient(accessToken);
-  const rowNumber = await findRowNumberById(sheets, sheetId, rowId);
+  const rowNumber = await findRowNumberById(sheets, sheetId, tabName, rowId);
   if (rowNumber === null) {
     throw new Error(`ไม่พบรายการที่รหัส "${rowId}" ในชีท`);
   }
@@ -281,17 +358,17 @@ export async function updateExpenseRowStatus(
 
   const data: sheets_v4.Schema$ValueRange[] = [
     {
-      range: `'${SHEET_TAB_NAME}'!${statusLetter}${rowNumber}`,
+      range: `'${tabName}'!${statusLetter}${rowNumber}`,
       values: [[status]],
     },
     {
-      range: `'${SHEET_TAB_NAME}'!${reviewedByLetter}${rowNumber}:${reviewedAtLetter}${rowNumber}`,
+      range: `'${tabName}'!${reviewedByLetter}${rowNumber}:${reviewedAtLetter}${rowNumber}`,
       values: [[reviewer?.reviewedBy ?? "", new Date().toISOString()]],
     },
   ];
   if (reviewer?.note) {
     data.push({
-      range: `'${SHEET_TAB_NAME}'!${noteLetter}${rowNumber}`,
+      range: `'${tabName}'!${noteLetter}${rowNumber}`,
       values: [[reviewer.note]],
     });
   }
@@ -309,16 +386,17 @@ export async function updateExpenseRowStatus(
  * Writes a Drive link into a row's "ลิงก์เอกสารรับเงิน" column, matched by
  * "รหัสรายการ" (same find-by-id pattern as updateExpenseRowStatus). Used
  * when a generated เอกสารรับเงิน .docx is linked back to the expense row it
- * was created for.
+ * was created for. `tabName` identifies which month tab the row lives in.
  */
 export async function updateExpenseRowReceiptDocLink(
   accessToken: string,
   sheetId: string,
+  tabName: string,
   rowId: string,
   link: string
 ): Promise<void> {
   const sheets = sheetsClient(accessToken);
-  const rowNumber = await findRowNumberById(sheets, sheetId, rowId);
+  const rowNumber = await findRowNumberById(sheets, sheetId, tabName, rowId);
   if (rowNumber === null) {
     throw new Error(`ไม่พบรายการที่รหัส "${rowId}" ในชีท`);
   }
@@ -326,7 +404,7 @@ export async function updateExpenseRowReceiptDocLink(
   const linkLetter = columnIndexToLetter(COLUMN_INDEX.receiptDocLink);
   await sheets.spreadsheets.values.update({
     spreadsheetId: sheetId,
-    range: `'${SHEET_TAB_NAME}'!${linkLetter}${rowNumber}`,
+    range: `'${tabName}'!${linkLetter}${rowNumber}`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [[link]] },
   });

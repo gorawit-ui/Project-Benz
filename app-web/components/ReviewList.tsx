@@ -8,11 +8,14 @@ export default function ReviewList() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [months, setMonths] = useState<string[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
 
-  async function load() {
+  async function load(month: string) {
     setError(null);
     try {
-      const res = await fetch("/api/expenses");
+      const url = month ? `/api/expenses?month=${encodeURIComponent(month)}` : "/api/expenses";
+      const res = await fetch(url);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "โหลดข้อมูลไม่สำเร็จ");
@@ -25,10 +28,35 @@ export default function ReviewList() {
   }
 
   useEffect(() => {
-    // Initial data fetch on mount — the standard "load once" pattern.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
+    // Initial load: fetch the month list, default selection to the first
+    // (most-recent) entry, then load that month's rows. If the month list
+    // comes back empty, fall back to fetching with no `month` param (server
+    // defaults to the current month).
+    (async () => {
+      try {
+        const res = await fetch("/api/expenses/months");
+        if (res.ok) {
+          const data = await res.json();
+          const list = (data.months ?? []) as string[];
+          setMonths(list);
+          if (list.length > 0) {
+            setSelectedMonth(list[0]);
+            await load(list[0]);
+            return;
+          }
+        }
+      } catch {
+        // fall through to unscoped load below
+      }
+      await load("");
+    })();
   }, []);
+
+  async function handleMonthChange(month: string) {
+    setSelectedMonth(month);
+    setRows(null);
+    await load(month);
+  }
 
   async function setStatus(id: string, status: "ตรวจแล้ว" | "ต้องแก้ไข") {
     setBusyId(id);
@@ -36,13 +64,13 @@ export default function ReviewList() {
       const res = await fetch(`/api/expenses/${encodeURIComponent(id)}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, note: noteDrafts[id] ?? "" }),
+        body: JSON.stringify({ status, note: noteDrafts[id] ?? "", monthTab: selectedMonth }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "อัปเดตสถานะไม่สำเร็จ");
       }
-      await load();
+      await load(selectedMonth);
     } catch (err) {
       setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
     } finally {
@@ -50,22 +78,52 @@ export default function ReviewList() {
     }
   }
 
+  const monthSelect = months.length > 0 && (
+    <select
+      value={selectedMonth}
+      onChange={(e) => handleMonthChange(e.target.value)}
+      className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+    >
+      {months.map((m) => (
+        <option key={m} value={m}>
+          {m}
+        </option>
+      ))}
+    </select>
+  );
+
   if (error) {
-    return <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>;
+    return (
+      <div className="space-y-3">
+        {monthSelect}
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      </div>
+    );
   }
 
   if (rows === null) {
-    return <p className="text-sm text-zinc-500">กำลังโหลด...</p>;
+    return (
+      <div className="space-y-3">
+        {monthSelect}
+        <p className="text-sm text-zinc-500">กำลังโหลด...</p>
+      </div>
+    );
   }
 
   const pending = rows.filter((r) => r.status === "รอตรวจ");
 
   if (pending.length === 0) {
-    return <p className="text-sm text-zinc-500">ไม่มีรายการรอตรวจ</p>;
+    return (
+      <div className="space-y-3">
+        {monthSelect}
+        <p className="text-sm text-zinc-500">ไม่มีรายการรอตรวจ</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
+      {monthSelect}
       {pending.map((row) => (
         <div key={row.id} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-2">

@@ -4,15 +4,24 @@ import { authOptions } from "@/lib/auth";
 import { getTeamByKey } from "@/lib/teams";
 import {
   appendExpenseRow,
+  ensureMonthTabExists,
   generateExpenseId,
   listExpenseRows,
   type DocumentType,
   type ExpenseRow,
   type FundType,
 } from "@/lib/sheets";
+import { monthLabelForBillDate } from "@/lib/month";
 
-/** GET /api/expenses — lists every row of the caller's own team's sheet (used by the review/dashboard pages). */
-export async function GET() {
+/**
+ * GET /api/expenses?month=<tabName>|?billDate=YYYY-MM-DD — lists every row
+ * of one month's tab in the caller's own team's sheet (used by the
+ * review/dashboard pages). Resolves the target tab as: the literal `month`
+ * tab name if given, else the month containing `billDate` if given, else
+ * today's month. Returns the resolved tab name too, as `month`, so the
+ * client knows what it just loaded.
+ */
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -22,9 +31,17 @@ export async function GET() {
     return NextResponse.json({ error: "ยังไม่ได้ตั้งค่า Google Sheet ของทีมนี้" }, { status: 500 });
   }
 
+  const monthParam = req.nextUrl.searchParams.get("month");
+  const billDateParam = req.nextUrl.searchParams.get("billDate");
+  const tabName =
+    monthParam && monthParam.trim()
+      ? monthParam.trim()
+      : monthLabelForBillDate(billDateParam?.trim() || undefined);
+
   try {
-    const rows = await listExpenseRows(session.accessToken, team.sheetId);
-    return NextResponse.json({ rows });
+    await ensureMonthTabExists(session.accessToken, team.sheetId, tabName);
+    const rows = await listExpenseRows(session.accessToken, team.sheetId, tabName);
+    return NextResponse.json({ rows, month: tabName });
   } catch (err) {
     console.error("GET /api/expenses failed", err);
     return NextResponse.json({ error: "อ่านข้อมูลจาก Google Sheet ไม่สำเร็จ" }, { status: 500 });
@@ -109,7 +126,11 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    await appendExpenseRow(session.accessToken, team.sheetId, row);
+    // A late entry for a prior month must file into THAT month's own tab,
+    // not today's — resolve the target tab from the submitted billDate.
+    const tabName = monthLabelForBillDate(row.billDate);
+    await ensureMonthTabExists(session.accessToken, team.sheetId, tabName);
+    await appendExpenseRow(session.accessToken, team.sheetId, tabName, row);
     return NextResponse.json({ row }, { status: 201 });
   } catch (err) {
     console.error("POST /api/expenses failed", err);

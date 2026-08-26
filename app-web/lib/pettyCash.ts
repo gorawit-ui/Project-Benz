@@ -14,7 +14,8 @@
  * threshold; otherwise the WHOLE bill becomes เงินทดรองจ่าย. A single bill is
  * never split across the two categories.
  */
-import { listExpenseRows, type ExpenseRow, type FundType } from "./sheets";
+import { ensureMonthTabExists, listExpenseRows, type ExpenseRow, type FundType } from "./sheets";
+import { monthLabelForBillDate } from "./month";
 
 /** Monthly เงินสดย่อย ceiling, confirmed by the product owner. */
 export const PETTY_CASH_MONTHLY_THRESHOLD = 20000;
@@ -40,13 +41,19 @@ export function sumPettyCashForMonth(rows: ExpenseRow[], referenceDate: string):
     .reduce((sum, row) => sum + row.grandTotal, 0);
 }
 
-/** Fetches every row for the team's sheet and sums this month's เงินสดย่อย usage. */
+/**
+ * Fetches every row for referenceDate's own month tab and sums this month's
+ * เงินสดย่อย usage. Ensures that month's tab exists first (cheap no-op once
+ * it does) so a brand new month with zero rows yet doesn't error.
+ */
 export async function getPettyCashUsedThisMonth(
   accessToken: string,
   sheetId: string,
   referenceDate: string
 ): Promise<number> {
-  const rows = await listExpenseRows(accessToken, sheetId);
+  const tabName = monthLabelForBillDate(referenceDate);
+  await ensureMonthTabExists(accessToken, sheetId, tabName);
+  const rows = await listExpenseRows(accessToken, sheetId, tabName);
   return sumPettyCashForMonth(rows, referenceDate);
 }
 

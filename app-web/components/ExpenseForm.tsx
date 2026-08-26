@@ -318,7 +318,7 @@ export default function ExpenseForm({
     setMessage(null);
     setCheckingDuplicate(true);
     try {
-      const res = await fetch("/api/expenses");
+      const res = await fetch("/api/expenses?billDate=" + encodeURIComponent(form.billDate));
       if (res.ok) {
         const data = await res.json();
         const rows = (data.rows ?? []) as ExpenseRow[];

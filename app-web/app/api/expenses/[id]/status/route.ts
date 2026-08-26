@@ -22,7 +22,7 @@ export async function POST(
 
   const { id } = await params;
 
-  let body: { status?: string; note?: string };
+  let body: { status?: string; note?: string; monthTab?: string };
   try {
     body = await req.json();
   } catch {
@@ -34,8 +34,12 @@ export async function POST(
     return NextResponse.json({ error: "invalid status" }, { status: 400 });
   }
 
+  if (!body.monthTab || typeof body.monthTab !== "string") {
+    return NextResponse.json({ error: "missing monthTab" }, { status: 400 });
+  }
+
   try {
-    await updateExpenseRowStatus(session.accessToken, team.sheetId, id, status, {
+    await updateExpenseRowStatus(session.accessToken, team.sheetId, body.monthTab, id, status, {
       reviewedBy: session.user.name ?? session.user.email ?? "",
       note: body.note ?? "",
     });

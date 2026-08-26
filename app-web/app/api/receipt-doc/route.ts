@@ -22,11 +22,15 @@ function sanitizeForFilename(value: string): string {
  * behavior as before, unchanged.
  *
  * Additive on top of that: the generated .docx is also uploaded to Drive
- * (see RECEIPT_DOC_DRIVE_FOLDER) and, if an expenseRowId was given, its link
- * is written into that row's "ลิงก์เอกสารรับเงิน" column. Both happen after
- * the buffer is generated and neither can fail the file download — Drive
- * upload / sheet errors are logged and surfaced via response headers only
- * (`X-Drive-Web-View-Link`, `X-Linked-Expense-Id`), never a failed response.
+ * (see RECEIPT_DOC_DRIVE_FOLDER) and, if both an expenseRowId AND a
+ * monthTab (the row's month tab name, since sheet writes now need to know
+ * which month tab to target and this route cannot guess it) were given, its
+ * link is written into that row's "ลิงก์เอกสารรับเงิน" column. If monthTab is
+ * missing, the sheet link-back step is skipped (logged, non-fatal). Both
+ * happen after the buffer is generated and neither can fail the file
+ * download — Drive upload / sheet errors are logged and surfaced via
+ * response headers only (`X-Drive-Web-View-Link`, `X-Linked-Expense-Id`),
+ * never a failed response.
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -41,6 +45,7 @@ export async function POST(req: NextRequest) {
   const amountNumber = Number(formData.get("amountNumber") ?? NaN);
   const docDate = ((formData.get("docDate") as string) || "").trim() || formatThaiBuddhistDate(new Date());
   const expenseRowId = ((formData.get("expenseRowId") as string) || "").trim();
+  const monthTab = ((formData.get("monthTab") as string) || "").trim();
 
   if (!payeeName || !idNumber || !expenseDetail || !Number.isFinite(amountNumber) || amountNumber <= 0) {
     return NextResponse.json({ error: "กรอกข้อมูลให้ครบ: ชื่อผู้รับเงิน, เลขบัตรประชาชน, รายละเอียด, จำนวนเงิน" }, { status: 400 });
@@ -89,8 +94,18 @@ export async function POST(req: NextRequest) {
         headers["X-Drive-Web-View-Link"] = uploaded.webViewLink;
 
         if (expenseRowId && team.sheetId) {
-          await updateExpenseRowReceiptDocLink(session.accessToken, team.sheetId, expenseRowId, uploaded.webViewLink);
-          headers["X-Linked-Expense-Id"] = expenseRowId;
+          if (monthTab) {
+            await updateExpenseRowReceiptDocLink(
+              session.accessToken,
+              team.sheetId,
+              monthTab,
+              expenseRowId,
+              uploaded.webViewLink
+            );
+            headers["X-Linked-Expense-Id"] = expenseRowId;
+          } else {
+            console.error("POST /api/receipt-doc: no monthTab provided, skipping sheet link-back");
+          }
         }
       }
     } catch (uploadErr) {

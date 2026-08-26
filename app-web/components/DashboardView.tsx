@@ -24,13 +24,6 @@ function formatCompactBaht(n: number): string {
   return "฿" + n.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-/** True when billDate (YYYY-MM-DD) falls in the given "YYYY-MM" month prefix.
- * Compared as strings (not parsed into Date) to avoid timezone-shift bugs
- * around midnight when the sheet only stores a plain calendar date. */
-function isInMonth(billDate: string, monthPrefix: string): boolean {
-  return billDate.slice(0, 7) === monthPrefix;
-}
-
 function sumGrandTotal(rows: ExpenseRow[]): number {
   return rows.reduce((acc, r) => acc + r.grandTotal, 0);
 }
@@ -41,44 +34,66 @@ export default function DashboardView() {
   const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [vendorSearch, setVendorSearch] = useState<string>("");
+  const [months, setMonths] = useState<string[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
+
+  async function loadRows(month: string) {
+    setError(null);
+    try {
+      const url = month ? `/api/expenses?month=${encodeURIComponent(month)}` : "/api/expenses";
+      const res = await fetch(url);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "โหลดข้อมูลไม่สำเร็จ");
+      }
+      const data = await res.json();
+      setRows(data.rows as ExpenseRow[]);
+      setFetchedAt(new Date());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    }
+  }
 
   useEffect(() => {
-    // Initial data fetch on mount — same "load once" pattern as ReviewList.
+    // Initial load: fetch the month list, default selection to the first
+    // (most-recent) entry, then load that month's rows. If the month list
+    // comes back empty, fall back to fetching with no `month` param (server
+    // defaults to the current month).
     (async () => {
       setError(null);
       try {
-        const res = await fetch("/api/expenses");
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || "โหลดข้อมูลไม่สำเร็จ");
+        const res = await fetch("/api/expenses/months");
+        if (res.ok) {
+          const data = await res.json();
+          const list = (data.months ?? []) as string[];
+          setMonths(list);
+          if (list.length > 0) {
+            setSelectedMonth(list[0]);
+            await loadRows(list[0]);
+            return;
+          }
         }
-        const data = await res.json();
-        setRows(data.rows as ExpenseRow[]);
-        setFetchedAt(new Date());
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      } catch {
+        // fall through to unscoped load below
       }
+      await loadRows("");
     })();
   }, []);
 
-  const currentMonthPrefix = useMemo(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  }, []);
-
-  const currentMonthRows = useMemo(
-    () => (rows ?? []).filter((r) => isInMonth(r.billDate, currentMonthPrefix)),
-    [rows, currentMonthPrefix]
-  );
+  async function handleMonthChange(month: string) {
+    setSelectedMonth(month);
+    setRows(null);
+    await loadRows(month);
+  }
 
   const pettyCashTotal = useMemo(
-    () => sumGrandTotal(currentMonthRows.filter((r) => r.fundType === "เงินสดย่อย")),
-    [currentMonthRows]
+    () => sumGrandTotal((rows ?? []).filter((r) => r.fundType === "เงินสดย่อย")),
+    [rows]
   );
 
   const advanceRows = useMemo(
-    () => currentMonthRows.filter((r) => r.fundType === "เงินทดรองจ่าย"),
-    [currentMonthRows]
+    () => (rows ?? []).filter((r) => r.fundType === "เงินทดรองจ่าย"),
+    [rows]
   );
   const advanceTotal = useMemo(() => sumGrandTotal(advanceRows), [advanceRows]);
   const advanceByPerson = useMemo(() => {
@@ -93,12 +108,12 @@ export default function DashboardView() {
   // is a simple "spent so far" total per category, not spent-vs-budget.
   const categoryTotals = useMemo(() => {
     const totals = new Map<string, number>();
-    for (const r of currentMonthRows) {
+    for (const r of rows ?? []) {
       const key = r.odooCategory || "(ไม่ระบุหมวดหมู่)";
       totals.set(key, (totals.get(key) ?? 0) + r.grandTotal);
     }
     return [...totals.entries()].sort((a, b) => b[1] - a[1]);
-  }, [currentMonthRows]);
+  }, [rows]);
   const maxCategoryTotal = categoryTotals.length > 0 ? categoryTotals[0][1] : 0;
 
   const categoryOptions = useMemo(() => {
@@ -121,12 +136,36 @@ export default function DashboardView() {
       .sort((a, b) => b.billDate.localeCompare(a.billDate));
   }, [rows, categoryFilter, vendorSearch]);
 
+  const monthSelect = months.length > 0 && (
+    <select
+      value={selectedMonth}
+      onChange={(e) => handleMonthChange(e.target.value)}
+      className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+    >
+      {months.map((m) => (
+        <option key={m} value={m}>
+          {m}
+        </option>
+      ))}
+    </select>
+  );
+
   if (error) {
-    return <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>;
+    return (
+      <div className="space-y-3">
+        {monthSelect}
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      </div>
+    );
   }
 
   if (rows === null) {
-    return <p className="text-sm text-zinc-500">กำลังโหลด...</p>;
+    return (
+      <div className="space-y-3">
+        {monthSelect}
+        <p className="text-sm text-zinc-500">กำลังโหลด...</p>
+      </div>
+    );
   }
 
   const pettyCashPercent = PETTY_CASH_MONTHLY_LIMIT > 0 ? (pettyCashTotal / PETTY_CASH_MONTHLY_LIMIT) * 100 : 0;
@@ -140,9 +179,13 @@ export default function DashboardView() {
 
   return (
     <div className="space-y-8">
-      <p className="text-xs text-zinc-400">
-        อัปเดตล่าสุด: {fetchedAt ? fetchedAt.toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "-"}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {monthSelect}
+        <p className="text-xs text-zinc-400">
+          อัปเดตล่าสุด: {fetchedAt ? fetchedAt.toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "-"}
+          {selectedMonth ? ` · ข้อมูลเดือน ${selectedMonth}` : ""}
+        </p>
+      </div>
 
       {/* Fund summary cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -174,7 +217,7 @@ export default function DashboardView() {
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-zinc-900">เงินทดรองจ่าย</span>
-            <span className="text-xs font-medium text-zinc-400">เดือนนี้</span>
+            <span className="text-xs font-medium text-zinc-400">{selectedMonth || "เดือนนี้"}</span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl font-bold text-zinc-900">{formatCompactBaht(advanceTotal)}</span>
@@ -196,7 +239,7 @@ export default function DashboardView() {
       {/* Category breakdown */}
       <div>
         <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-400">
-          แยกตามหมวดหมู่ (ตาม Odoo) · เดือนนี้
+          แยกตามหมวดหมู่ (ตาม Odoo) · {selectedMonth || "เดือนนี้"}
         </h2>
         {categoryTotals.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">ไม่มีรายการในเดือนนี้</p>

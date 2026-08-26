@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getTeamByKey } from "@/lib/teams";
 import { uploadReceiptFile } from "@/lib/drive";
+import { formatThaiMonthLabel } from "@/lib/month";
 
 function extensionForMimeType(mimeType: string): string {
   switch (mimeType) {
@@ -50,9 +51,8 @@ export async function POST(req: NextRequest) {
   const mimeType = file.type || "application/octet-stream";
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const now = new Date();
-  // แยกโฟลเดอร์ตามเดือน (พ.ศ.), e.g. "2569-08".
-  const monthFolderName = `${now.getFullYear() + 543}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  // แยกโฟลเดอร์ตามเดือน (พ.ศ.), e.g. "2569-08 สิงหาคม".
+  const monthFolderName = formatThaiMonthLabel(new Date());
   const filename = `${supplierName}-${Date.now()}${extensionForMimeType(mimeType)}`;
 
   try {
