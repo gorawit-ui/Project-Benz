@@ -73,16 +73,6 @@ function noBorder() {
   return { top: none, bottom: none, left: none, right: none };
 }
 
-function thinBorder() {
-  // 8 = 1pt (BorderStyle sizes are in eighths of a point). The original
-  // template's 4 (0.5pt) is correct per the OOXML spec but renders as
-  // effectively invisible in some mobile viewers (e.g. WPS Office on
-  // Android) — bumped up so the footer/date boxes reliably show a visible
-  // border everywhere, not just in apps that render hairline borders well.
-  const b = { style: BorderStyle.SINGLE, size: 8, color: "222222" };
-  return { top: b, left: b, bottom: b, right: b };
-}
-
 function ruleLine() {
   const line = { style: BorderStyle.SINGLE, size: 8, color: "222222" };
   const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
@@ -203,7 +193,7 @@ function buildDateTable(dateText: string) {
           new TableCell({ width: widthDxa(DATE_SPACER_WIDTH), borders: noBorder(), children: [new Paragraph("")] }),
           new TableCell({
             width: widthDxa(DATE_BOX_WIDTH),
-            borders: thinBorder(),
+            borders: noBorder(),
             margins: { top: 100, bottom: 100, left: 120, right: 120 },
             children: [
               para([run("วันที่ "), run(dateText, { bold: true })], {
@@ -241,7 +231,7 @@ function buildFooterTable(payeeName: string, idCardImage?: { buffer: Buffer; typ
   const photoNode = buildIdPhotoCellContent(idCardImage);
   return new Table({
     width: widthDxa(CONTENT_WIDTH),
-    borders: thinBorder(),
+    borders: noBorder(),
     rows: [
       new TableRow({
         children: [
