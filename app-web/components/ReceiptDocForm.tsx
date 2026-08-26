@@ -16,6 +16,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
   const [downloadFilename, setDownloadFilename] = useState<string>("เอกสารรับเงิน.docx");
   const [driveLink, setDriveLink] = useState<string | null>(null);
   const [linkedExpenseId, setLinkedExpenseId] = useState<string | null>(null);
+  const [driveWarning, setDriveWarning] = useState<string | null>(null);
 
   // A brief, self-dismissing center-screen toast (e.g. "สร้างเอกสารรับเงินเสร็จแล้ว",
   // "ดาวน์โหลดเอกสารรับเงินแล้ว") — `visible` drives the fade in/out transition,
@@ -98,6 +99,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
     setDownloadUrl(null);
     setDriveLink(null);
     setLinkedExpenseId(null);
+    setDriveWarning(null);
     setSubmitting(true);
 
     try {
@@ -125,12 +127,14 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       const uploadedLink = res.headers.get("X-Drive-Web-View-Link");
       const linkedId = res.headers.get("X-Linked-Expense-Id");
       const compactDocDate = res.headers.get("X-Doc-Date-Compact") ?? "";
+      const uploadError = res.headers.get("X-Drive-Upload-Error");
 
       const blob = await res.blob();
       setDownloadUrl(URL.createObjectURL(blob));
       setDownloadFilename(buildDownloadFilename(compactDocDate));
       if (uploadedLink) setDriveLink(uploadedLink);
       if (linkedId) setLinkedExpenseId(linkedId);
+      if (uploadError) setDriveWarning(decodeURIComponent(uploadError));
       showToast("สร้างเอกสารรับเงินเสร็จแล้ว");
     } catch (err) {
       setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
@@ -317,6 +321,12 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
             </a>
           </p>
           {linkedExpenseId && <p className="mt-1">บันทึกลิงก์ในรายการ {linkedExpenseId} แล้ว</p>}
+        </div>
+      )}
+
+      {driveWarning && (
+        <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p>ดาวน์โหลดเอกสารสำเร็จ แต่อัปโหลดเข้า Drive ไม่สำเร็จ ({driveWarning})</p>
         </div>
       )}
     </form>

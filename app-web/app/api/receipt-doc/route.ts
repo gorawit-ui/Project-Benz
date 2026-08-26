@@ -99,11 +99,7 @@ export async function POST(req: NextRequest) {
             buffer,
             mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
           },
-          // No ".docx" suffix — Drive converts this into a native Google Doc
-          // (see uploadReceiptFile's convertToGoogleDoc), which renders
-          // cleanly online, unlike its raw-.docx inline preview.
-          `receipt-doc-${sanitizeForFilename(payeeName)}-${Date.now()}`,
-          true
+          `receipt-doc-${sanitizeForFilename(payeeName)}-${Date.now()}.docx`
         );
         headers["X-Drive-Web-View-Link"] = uploaded.webViewLink;
 
@@ -124,6 +120,12 @@ export async function POST(req: NextRequest) {
       }
     } catch (uploadErr) {
       console.error("POST /api/receipt-doc: Drive upload/link failed (non-fatal, download still proceeds)", uploadErr);
+      // Surfaced as a header (not a failed response — the download must still
+      // succeed) so a silent Drive-side failure is visible to the client
+      // instead of only ever showing up in server logs nobody's watching.
+      headers["X-Drive-Upload-Error"] = encodeURIComponent(
+        uploadErr instanceof Error ? uploadErr.message : "unknown error"
+      );
     }
 
     return new NextResponse(new Uint8Array(buffer), { status: 200, headers });

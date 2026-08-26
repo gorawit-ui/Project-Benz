@@ -105,16 +105,16 @@ export interface FileToUpload {
  * GOOGLE_DRIVE_ROOT_FOLDER_ID) — this function does not itself grant any
  * new permissions, since the app only holds drive.file-scoped access.
  *
- * `convertToGoogleDoc` (only meaningful for a .docx `file`) requests that
- * Drive convert the upload into a native Google Doc instead of storing the
- * raw .docx bytes. This matters because Drive's INLINE PREVIEW of a raw
- * .docx (what "เปิดไฟล์ใน Drive" shows without this flag) uses a much
- * weaker/older rendering path than an actual Google Doc — one that garbles
- * complex tab-stop/dot-leader layouts into one-character-per-line text,
- * even though the underlying .docx bytes are completely correct (downloads
- * of the same file, direct or from Drive, always open fine in Word/WPS).
- * Converting on upload sidesteps that renderer entirely; the app's own
- * direct-download response is untouched either way.
+ * Uploads the file as-is (no explicit Google Docs conversion request). An
+ * earlier version of this function requested Drive convert .docx uploads
+ * into a native Google Doc, on the theory that Drive's inline preview of a
+ * raw .docx used a weaker renderer than an actual Google Doc — but a
+ * fully-converted Google Doc turned out to show the exact same
+ * one-character-per-line garbling, which traced back to a missing
+ * `columnWidths` on the .docx's own tables (see receiptDoc.ts), not to
+ * which Drive rendering path was used. Since that's now fixed at the
+ * source, requesting conversion here would only add a real failure mode —
+ * a conversion request can be rejected outright — for no remaining benefit.
  */
 export async function uploadReceiptFile(
   accessToken: string,
@@ -122,8 +122,7 @@ export async function uploadReceiptFile(
   rootFolderId: string,
   monthFolderName: string,
   file: FileToUpload,
-  filename: string,
-  convertToGoogleDoc = false
+  filename: string
 ): Promise<UploadedFile> {
   const drive = driveClient(accessToken);
   const folderId = await resolveFolderId(drive, accessToken, sheetId, rootFolderId, monthFolderName);
@@ -132,7 +131,6 @@ export async function uploadReceiptFile(
     requestBody: {
       name: filename,
       parents: [folderId],
-      ...(convertToGoogleDoc ? { mimeType: "application/vnd.google-apps.document" } : {}),
     },
     media: {
       mimeType: file.mimeType,
