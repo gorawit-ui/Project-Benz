@@ -273,6 +273,26 @@ export async function listMonthTabNames(accessToken: string, sheetId: string): P
     .sort((a, b) => b.localeCompare(a));
 }
 
+/**
+ * Row number (1-based) the next appended row should go to: DATA_START_ROW
+ * plus however many รหัสรายการ cells are already filled in from there down.
+ * Deliberately not `values.append` — append asks Sheets to auto-detect
+ * "the end of the table" starting from A1, which lands one row too high
+ * (row 6 instead of 7) the moment row 6 (the example row) is empty/deleted,
+ * silently writing data outside DATA_START_ROW where listExpenseRows never
+ * looks for it. Computing the row explicitly is correct regardless of
+ * what's above it.
+ */
+async function findNextDataRow(sheets: sheets_v4.Sheets, sheetId: string, tabName: string): Promise<number> {
+  const idColumnLetter = columnIndexToLetter(COLUMN_INDEX.id);
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: `'${tabName}'!${idColumnLetter}${DATA_START_ROW}:${idColumnLetter}`,
+  });
+  const ids = res.data.values ?? [];
+  return DATA_START_ROW + ids.length;
+}
+
 /** Appends one expense row to the end of the given month tab's table. */
 export async function appendExpenseRow(
   accessToken: string,
@@ -281,11 +301,11 @@ export async function appendExpenseRow(
   row: ExpenseRow
 ): Promise<void> {
   const sheets = sheetsClient(accessToken);
-  await sheets.spreadsheets.values.append({
+  const targetRow = await findNextDataRow(sheets, sheetId, tabName);
+  await sheets.spreadsheets.values.update({
     spreadsheetId: sheetId,
-    range: `'${tabName}'!A1:${LAST_COLUMN_LETTER}1`,
+    range: `'${tabName}'!A${targetRow}:${LAST_COLUMN_LETTER}${targetRow}`,
     valueInputOption: "USER_ENTERED",
-    insertDataOption: "INSERT_ROWS",
     requestBody: {
       values: [rowToValues(row)],
     },
