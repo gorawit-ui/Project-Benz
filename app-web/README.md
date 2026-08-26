@@ -1,36 +1,102 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TDFB Expense Tracking — app-web
 
-## Getting Started
+Next.js (App Router, TypeScript, Tailwind CSS) scaffold for the TDFB expense-tracking
+app. No database — the Google Sheet described in
+[`docs/03-data-schema.md`](../docs/03-data-schema.md) (built by
+[`templates/sheet/build_expense_tracking_sheet.py`](../templates/sheet/build_expense_tracking_sheet.py))
+is the data store, and receipts/attachments live in Google Drive. Every
+read/write happens with the signed-in user's own Google OAuth token — there
+is no shared service account in this phase. **Odoo is not integrated** —
+that is explicitly out of scope for this whole project phase.
 
-First, run the development server:
+## Setup
+
+### 1. Install dependencies
+
+```bash
+cd app-web
+npm install
+```
+
+### 2. Google OAuth client
+
+In [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials:
+
+1. Create an **OAuth client ID** of type "Web application" (or reuse one for the `tdfb.co` Workspace).
+2. Add an authorized redirect URI: `http://localhost:3000/api/auth/callback/google` (and your production URL's equivalent).
+3. Enable the **Google Sheets API** and **Google Drive API** for the project.
+4. Under OAuth consent screen scopes, the app requests (in code, via `lib/auth.ts` — nothing to configure manually beyond enabling the APIs):
+   - `openid`, `email`, `profile`
+   - `https://www.googleapis.com/auth/spreadsheets`
+   - `https://www.googleapis.com/auth/drive.file`
+5. Copy the generated Client ID / Client Secret into your `.env.local`.
+
+### 3. Environment variables
+
+```bash
+cp .env.example .env.local
+```
+
+Fill in:
+
+| Variable | Description |
+|---|---|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | From the OAuth client above |
+| `NEXTAUTH_SECRET` | Random string, e.g. `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | `http://localhost:3000` in dev |
+| `GM_SHEET_ID` | The GM team's "Expense Tracking" Google Sheet id (from its URL) — see [Team routing](#team-routing) |
+| `GM_DRIVE_ROOT_FOLDER_ID` | Drive folder GM's receipts/documents are uploaded under (month subfolders are created automatically inside it) |
+
+Sign-in is restricted to `@tdfb.co` emails **that are also a member of a configured team** in `lib/auth.ts`'s `signIn` callback — everyone else is rejected (see below).
+
+## Team routing
+
+Every team gets its own Google Sheet and Drive folder — nothing is shared across teams. `lib/teams.ts` maps `email → team → {sheetId, driveRootFolderId}`; on sign-in, `lib/auth.ts` resolves the caller's team from their email and stores it on the session (`session.team`). Every API route (`/api/expenses`, `/api/upload`, ...) then reads/writes the *caller's own team's* Sheet/Drive — never a hardcoded global one.
+
+Currently only **GM (General Management)** is configured, for the pilot:
+
+```ts
+{
+  key: "gm",
+  name: "General Management (GM)",
+  costCenter: "TD050100",
+  sheetId: process.env.GM_SHEET_ID,
+  driveRootFolderId: process.env.GM_DRIVE_ROOT_FOLDER_ID,
+  members: ["gorawit@tdfb.co", "sirirat@tdfb.co", "napat@tdfb.co"],
+}
+```
+
+Any `@tdfb.co` email **not** listed in a team's `members` is turned away at sign-in (shown as "อีเมลนี้ยังไม่ได้รับสิทธิ์เข้าใช้งาน" on `/login`) — this is intentional for the pilot, not a bug.
+
+**To onboard a new team**: add an entry to the `TEAMS` array in `lib/teams.ts` (team key, display name, member emails) and its own `<TEAM>_SHEET_ID` / `<TEAM>_DRIVE_ROOT_FOLDER_ID` env vars — no other code changes needed. If the number of teams grows large, this static list is a natural candidate to move to a small admin UI or a config sheet, but a hardcoded list is the right amount of engineering for 1 team / 3 users.
+
+### 4. Run
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit `http://localhost:3000` — you'll be redirected to `/login` if not signed in.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## What's implemented
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Auth**: Google sign-in via NextAuth v4, restricted to `@tdfb.co` AND to configured team members only, requesting Sheets + Drive scopes, access token persisted on the session (`lib/auth.ts`, `types/next-auth.d.ts`).
+- **`lib/teams.ts`**: email → team routing (see [Team routing](#team-routing)) — every Sheet/Drive read-write is scoped to the caller's own team, never shared across teams. Only GM (3 pilot emails) is configured so far.
+- **`lib/sheets.ts`**: `ExpenseRow` type + `COLUMN_HEADERS` matching the 25-column schema exactly (column order mirrors `templates/sheet/build_expense_tracking_sheet.py`'s `groups`), plus `appendExpenseRow`, `listExpenseRows`, `updateExpenseRowStatus` (matches rows by "รหัสรายการ", not row position).
+- **`lib/drive.ts`**: `uploadReceiptFile` — finds-or-creates a month subfolder under `GOOGLE_DRIVE_ROOT_FOLDER_ID`, uploads, returns a link.
+- **`lib/receiptDoc.ts`**: `generateReceiptDoc(...)` — ported from `templates/receipt-doc/build.js`, same TDFB header/title/body/footer structure and `id_card_photo` bookmark, now parameterized with real data instead of template tags.
+- **`lib/thaiBahtText.ts`**: `numberToThaiBahtText(amount)` — real Thai digit-reading algorithm (หน่วย/สิบ/ร้อย/พัน/หมื่น/แสน/ล้าน, เอ็ด/ยี่ special cases), verified against the spec's examples (202 → "สองร้อยสองบาทถ้วน", 1250 → "หนึ่งพันสองร้อยห้าสิบบาทถ้วน").
+- **API routes**: `GET/POST /api/expenses`, `POST /api/expenses/[id]/status`, `POST /api/upload`, `POST /api/receipt-doc`.
+- **Pages**: `/login`, `/` (manual-entry expense form — no OCR, all fields directly editable), `/review` (list รอตรวจ rows, mark ตรวจแล้ว/ต้องแก้ไข), `/receipt-doc/create` (generates and downloads the .docx, with a live Thai-baht-text preview).
 
-## Learn More
+## What's stubbed / deferred (follow-up work)
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **OCR / AI receipt reading** — out of scope for this pass by design; the Main page is a manual-entry form for the fields OCR would eventually fill.
+- **Dashboard, Approver, ReportBug pages** — not built in this pass (see `design/*.dc.html` for their mockups); only Login, Main, Review, and CreateReceiptDoc were built.
+- **Real Odoo category list** — `หมวดหมู่ (ตาม Odoo)` is a free-text input; blocked on [`docs/04-open-items.md`](../docs/04-open-items.md) item A ("หมวดหมู่ + Cost Center + Acc name จริงจาก Odoo"). `Cost Center` / `Acc name` columns exist in the schema but have no form fields yet for the same reason.
+- **Duplicate detection** (ชื่อบริษัท + จำนวนเงิน + วันที่ ซ้ำกัน, red-row popup) — the `แจ้งเตือนรายการซ้ำ` column exists in `ExpenseRow` but nothing populates it yet.
+- **฿20,000/month petty-cash-vs-advance auto-classification** — the fund-type toggle is currently manual only; the requirement's open question about split-billing at the threshold (`docs/04-open-items.md`) isn't resolved.
+- **Refresh-token rotation** — `lib/auth.ts` stores the Google `refresh_token` on the JWT but does not yet use it to silently renew an expired `access_token` (~1 hour lifetime); users will need to re-sign-in after it expires.
+- **Sequential "รหัสรายการ" numbering** — `generateExpenseId()` produces a timestamp-based unique id (`EX-...`), not the sequential `EX-2026-0001`-style id shown in the sheet template's example row; real sequential numbering needs to read the sheet's current max id first.
+- **Uploading the generated เอกสารรับเงิน .docx to Drive** — `/api/receipt-doc` returns the file for direct download only; it does not also upload a copy to Drive and populate the `ลิงก์เอกสารรับเงิน` sheet column.
+- **TDFB logo** — still the `[TDFB LOGO]` placeholder in the generated document, per the known limitation noted in `templates/receipt-doc/README.md`.
