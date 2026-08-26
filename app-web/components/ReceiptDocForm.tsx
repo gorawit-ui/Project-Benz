@@ -17,6 +17,27 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
   const [driveLink, setDriveLink] = useState<string | null>(null);
   const [linkedExpenseId, setLinkedExpenseId] = useState<string | null>(null);
 
+  // A brief, self-dismissing center-screen toast (e.g. "สร้างเอกสารรับเงินเสร็จแล้ว",
+  // "ดาวน์โหลดเอกสารรับเงินแล้ว") — `visible` drives the fade in/out transition,
+  // and the toast is only removed from the DOM after the fade-out finishes.
+  const [toast, setToast] = useState<{ text: string; visible: boolean } | null>(null);
+  const toastTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  function showToast(text: string) {
+    toastTimersRef.current.forEach(clearTimeout);
+    setToast({ text, visible: true });
+    const hideTimer = setTimeout(() => {
+      setToast((prev) => (prev ? { ...prev, visible: false } : prev));
+      const removeTimer = setTimeout(() => setToast(null), 300);
+      toastTimersRef.current.push(removeTimer);
+    }, 2200);
+    toastTimersRef.current = [hideTimer];
+  }
+
+  useEffect(() => {
+    return () => toastTimersRef.current.forEach(clearTimeout);
+  }, []);
+
   // รอตรวจ rows this เอกสารรับเงิน can optionally be linked to — see
   // "ผูกกับรายการค่าใช้จ่าย (ถ้ามี)" below. Fetched once on mount; failing to
   // load this list is a convenience miss only, never blocks the form.
@@ -110,6 +131,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       setDownloadFilename(buildDownloadFilename(compactDocDate));
       if (uploadedLink) setDriveLink(uploadedLink);
       if (linkedId) setLinkedExpenseId(linkedId);
+      showToast("สร้างเอกสารรับเงินเสร็จแล้ว");
     } catch (err) {
       setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
     } finally {
@@ -264,10 +286,26 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         <a
           href={downloadUrl}
           download={downloadFilename}
+          onClick={() => showToast("ดาวน์โหลดเอกสารรับเงินแล้ว")}
           className="block w-full rounded-lg border border-emerald-700 px-4 py-3 text-center font-medium text-emerald-700 hover:bg-emerald-50"
         >
           ดาวน์โหลดเอกสารรับเงิน (.docx)
         </a>
+      )}
+
+      {toast && (
+        <div
+          className="pointer-events-none fixed inset-x-0 top-1/3 z-50 flex justify-center px-4"
+          aria-live="polite"
+        >
+          <div
+            className={`rounded-full bg-zinc-900/90 px-5 py-2.5 text-sm font-medium text-white shadow-lg transition-all duration-300 ${
+              toast.visible ? "translate-y-0 scale-100 opacity-100" : "-translate-y-1 scale-95 opacity-0"
+            }`}
+          >
+            {toast.text}
+          </div>
+        </div>
       )}
 
       {driveLink && (
