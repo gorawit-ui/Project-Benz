@@ -39,9 +39,19 @@ const FONT = "TH Sarabun New";
 // content width. Every table/cell below is sized in DXA (absolute twips)
 // derived from this, never WidthType.PERCENTAGE: the docx package renders a
 // percentage width as a literal `w:w="100%"`-style string, which Word and
-// WPS tolerate but Google Docs' .docx importer does not — it silently
-// collapses the cell to near-zero width, forcing every character of the
-// company name onto its own line. Absolute twips are unambiguous everywhere.
+// WPS tolerate but Google Docs' .docx importer does not.
+//
+// That alone isn't enough, though — EVERY `new Table(...)` below must also
+// pass `columnWidths: [...]` matching its cells' real DXA widths. Without
+// it, the docx package writes a placeholder `<w:tblGrid><w:gridCol
+// w:w="100"/>...` (100 twips, i.e. next to nothing) regardless of what each
+// cell's own `w:tcW` says. Word/WPS render fine anyway (they trust the
+// per-cell width over the grid), which is why this went unnoticed through
+// several rounds of testing — but Google Docs' renderer treats `tblGrid` as
+// authoritative, squeezing any cell with real text into that ~0-width
+// column and wrapping it one character per line. Confirmed by unzipping a
+// real generated .docx and comparing `<w:tblGrid>` against the per-cell
+// widths actually intended.
 const PAGE_MARGIN = 1440;
 const PAGE_WIDTH = 11906;
 const CONTENT_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2;
@@ -133,6 +143,7 @@ function ruleLine() {
   const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
   return new Table({
     width: widthDxa(CONTENT_WIDTH),
+    columnWidths: [CONTENT_WIDTH],
     layout: TableLayoutType.FIXED,
     rows: [
       new TableRow({
@@ -157,6 +168,7 @@ function dashedBorder() {
 function dashedBox(cellChildren: Paragraph[], widthTwips: number = CONTENT_WIDTH) {
   return new Table({
     width: widthDxa(widthTwips),
+    columnWidths: [widthTwips],
     layout: TableLayoutType.FIXED,
     rows: [
       new TableRow({
@@ -180,6 +192,7 @@ const HEADER_TEXT_WIDTH = CONTENT_WIDTH - HEADER_LOGO_WIDTH;
 function buildHeaderTable() {
   return new Table({
     width: widthDxa(CONTENT_WIDTH),
+    columnWidths: [HEADER_LOGO_WIDTH, HEADER_TEXT_WIDTH],
     layout: TableLayoutType.FIXED,
     borders: noBorder(),
     rows: [
@@ -251,6 +264,7 @@ const DATE_BOX_WIDTH = CONTENT_WIDTH - DATE_SPACER_WIDTH;
 function buildDateTable(dateText: string) {
   return new Table({
     width: widthDxa(CONTENT_WIDTH),
+    columnWidths: [DATE_SPACER_WIDTH, DATE_BOX_WIDTH],
     layout: TableLayoutType.FIXED,
     borders: noBorder(),
     rows: [
@@ -297,6 +311,7 @@ function buildFooterTable(payeeName: string, idCardImage?: { buffer: Buffer; typ
   const photoNode = buildIdPhotoCellContent(idCardImage);
   return new Table({
     width: widthDxa(CONTENT_WIDTH),
+    columnWidths: [FOOTER_PHOTO_WIDTH, FOOTER_SIGNATURE_WIDTH],
     layout: TableLayoutType.FIXED,
     borders: noBorder(),
     rows: [
