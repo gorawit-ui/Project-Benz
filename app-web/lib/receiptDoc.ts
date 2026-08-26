@@ -178,13 +178,15 @@ function buildHeaderTable() {
             verticalAlign: VerticalAlign.CENTER,
             children: [
               para([run("บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด", { bold: true, size: 32 })], {
+                alignment: AlignmentType.RIGHT,
                 spacing: { after: 40, line: 260 },
               }),
               para(
                 [run("300 ถนนประชาอุทิศ แขวงทุ่งครุ เขตทุ่งครุ กรุงเทพมหานคร 10140", { size: 24, color: "444444" })],
-                { spacing: { after: 20, line: 240 } }
+                { alignment: AlignmentType.RIGHT, spacing: { after: 20, line: 240 } }
               ),
               para([run("โทร 096-009-3570", { size: 24, color: "444444" })], {
+                alignment: AlignmentType.RIGHT,
                 spacing: { after: 0, line: 240 },
               }),
             ],
