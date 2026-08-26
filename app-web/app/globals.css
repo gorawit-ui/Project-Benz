@@ -13,5 +13,5 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: "TH Sarabun New", "Noto Sans Thai", ui-sans-serif, system-ui, Arial, sans-serif;
+  /* Font is set via next/font (Prompt) on <body> in app/layout.tsx. */
 }
