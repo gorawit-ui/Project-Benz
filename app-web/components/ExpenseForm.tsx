@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import type { DocumentType, FundType } from "@/lib/sheets";
+import type { ExtractedReceiptData } from "@/lib/ocr";
 
 const DOCUMENT_TYPES: DocumentType[] = ["ใบเสร็จรับเงิน", "ใบกำกับภาษี", "บิลเงินสด"];
 
@@ -45,11 +46,18 @@ const INITIAL_STATE: FormState = {
   grandTotal: "",
 };
 
+type OcrMessage = { type: "success" | "warning" | "error"; text: string };
+
 export default function ExpenseForm({ recordedByName }: { recordedByName: string }) {
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrMessage, setOcrMessage] = useState<OcrMessage | null>(null);
+
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -68,6 +76,83 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
       }));
     } else {
       set("amountBeforeVat", value);
+    }
+  }
+
+  /**
+   * Merges OCR-extracted fields into the form. Only overwrites fields that
+   * actually came back non-empty — a field OCR couldn't read is simply left
+   * alone (whatever the user already typed, or blank, stays as-is).
+   */
+  function applyExtractedData(data: ExtractedReceiptData) {
+    const patch: Partial<FormState> = {};
+    if (data.documentType) patch.documentType = data.documentType;
+    if (data.supplierNameTh) patch.supplierNameTh = data.supplierNameTh;
+    if (data.supplierNameEn) patch.supplierNameEn = data.supplierNameEn;
+    if (data.expenseDetail) patch.expenseDetail = data.expenseDetail;
+    if (data.billDate) patch.billDate = data.billDate;
+    if (data.documentNumber) patch.documentNumber = data.documentNumber;
+
+    const hasBeforeVat = data.amountBeforeVat !== undefined;
+    const hasVat = data.vatAmount !== undefined;
+    const hasTotal = data.grandTotal !== undefined;
+
+    if (Object.keys(patch).length > 0) {
+      setForm((prev) => ({ ...prev, ...patch }));
+    }
+
+    if (hasBeforeVat && !hasVat && !hasTotal) {
+      // OCR only read the pre-VAT amount — reuse the existing auto-calc so
+      // vatAmount/grandTotal derive from it exactly like manual entry does.
+      handleAmountBeforeVatChange(String(data.amountBeforeVat));
+    } else if (hasBeforeVat || hasVat || hasTotal) {
+      // OCR read at least two of the three amounts itself — trust its own
+      // read rather than overwriting it with the auto-calc.
+      setForm((prev) => ({
+        ...prev,
+        ...(hasBeforeVat ? { amountBeforeVat: String(data.amountBeforeVat) } : {}),
+        ...(hasVat ? { vatAmount: String(data.vatAmount) } : {}),
+        ...(hasTotal ? { grandTotal: String(data.grandTotal) } : {}),
+      }));
+    }
+  }
+
+  async function runOcr(file: File) {
+    setOcrLoading(true);
+    setOcrMessage(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/ocr", { method: "POST", body });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error || "อ่านข้อมูลจากใบเสร็จไม่สำเร็จ");
+      }
+      const data = (json.data ?? {}) as ExtractedReceiptData;
+      applyExtractedData(data);
+      setOcrMessage(
+        data.confidence === "low"
+          ? { type: "warning", text: "อ่านข้อมูลได้ไม่ชัดเจน กรุณาตรวจสอบให้ละเอียด" }
+          : { type: "success", text: "อ่านข้อมูลจากใบเสร็จแล้ว ตรวจสอบและแก้ไขได้ก่อนบันทึก" }
+      );
+    } catch (err) {
+      // OCR failing must never block the flow — the file stays attached and
+      // the employee can still fill the form in manually.
+      setOcrMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "อ่านข้อมูลจากใบเสร็จไม่สำเร็จ กรุณากรอกข้อมูลเอง",
+      });
+    } finally {
+      setOcrLoading(false);
+    }
+  }
+
+  function handleFileSelected(file: File | null) {
+    setReceiptFile(file);
+    if (file) {
+      void runOcr(file);
+    } else {
+      setOcrMessage(null);
     }
   }
 
@@ -112,6 +197,7 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
       setMessage({ type: "success", text: "บันทึกรายการเรียบร้อย สถานะ: รอตรวจ" });
       setForm(INITIAL_STATE);
       setReceiptFile(null);
+      setOcrMessage(null);
     } catch (err) {
       setMessage({ type: "error", text: err instanceof Error ? err.message : "เกิดข้อผิดพลาด" });
     } finally {
@@ -268,12 +354,104 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
 
       <div>
         <label className={labelClass}>รูปถ่ายใบเสร็จ</label>
+        <p className="mt-1 text-xs text-zinc-500">
+          ถ่ายรูปหรือแนบไฟล์ใบเสร็จ ระบบจะอ่านและเติมข้อมูลในฟอร์มให้อัตโนมัติ (ตรวจสอบและแก้ไขได้ก่อนบันทึก)
+        </p>
+
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-emerald-800 active:scale-[0.98] active:bg-emerald-900"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 8a2 2 0 0 1 2-2h1.2a2 2 0 0 0 1.66-.9l.6-.9A2 2 0 0 1 11.1 3h1.8a2 2 0 0 1 1.64.87l.6.9a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z" />
+              <circle cx="12" cy="13" r="3.6" />
+            </svg>
+            ถ่ายรูปใบเสร็จ
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-zinc-300 bg-white px-4 py-3.5 text-sm font-semibold text-zinc-700 transition-all duration-150 hover:bg-zinc-50 active:scale-[0.98] active:bg-zinc-100"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+              <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+              <path d="M9 15l1.5-2 1.5 1.8L14 12l3 4" />
+              <circle cx="9.5" cy="10.5" r="1" />
+            </svg>
+            แนบไฟล์
+          </button>
+        </div>
+
+        {/* Rear-camera-first on mobile: accept + capture opens the camera directly. */}
         <input
+          ref={cameraInputRef}
           type="file"
-          accept="image/*,application/pdf"
-          className="mt-1 block w-full text-sm text-zinc-600"
-          onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => handleFileSelected(e.target.files?.[0] ?? null)}
         />
+        {/* Regular file/photo picker — also supports PDF, no capture attribute. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,application/pdf"
+          className="hidden"
+          onChange={(e) => handleFileSelected(e.target.files?.[0] ?? null)}
+        />
+
+        {receiptFile && !ocrLoading && (
+          <p className="mt-2 truncate text-xs text-zinc-500">ไฟล์ที่แนบ: {receiptFile.name}</p>
+        )}
+
+        {ocrLoading && receiptFile && (
+          <div className="mt-3 flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+            <div className="h-10 w-8 flex-shrink-0 rounded border border-zinc-200 bg-white" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-zinc-700">{receiptFile.name}</p>
+              <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-200">
+                <div className="h-full w-2/3 animate-pulse rounded-full bg-emerald-600" />
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">กำลังอ่านข้อมูลด้วย OCR...</p>
+            </div>
+          </div>
+        )}
+
+        {ocrMessage && (
+          <p
+            className={`mt-2 rounded-md px-3 py-2 text-xs ${
+              ocrMessage.type === "success"
+                ? "bg-emerald-50 text-emerald-800"
+                : ocrMessage.type === "warning"
+                  ? "bg-amber-50 text-amber-800"
+                  : "bg-red-50 text-red-700"
+            }`}
+          >
+            {ocrMessage.text}
+          </p>
+        )}
       </div>
 
       {message && (

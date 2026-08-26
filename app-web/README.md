@@ -46,6 +46,7 @@ Fill in:
 | `NEXTAUTH_URL` | `http://localhost:3000` in dev |
 | `GM_SHEET_ID` | The GM team's "Expense Tracking" Google Sheet id (from its URL) — see [Team routing](#team-routing) |
 | `GM_DRIVE_ROOT_FOLDER_ID` | Drive folder GM's receipts/documents are uploaded under (month subfolders are created automatically inside it) |
+| `GEMINI_API_KEY` | Gemini API key for OCR receipt reading, from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (same Google Cloud project as OAuth, no new project needed) |
 
 Sign-in is restricted to `@tdfb.co` emails **that are also a member of a configured team** in `lib/auth.ts`'s `signIn` callback — everyone else is rejected (see below).
 
@@ -109,12 +110,12 @@ Plan: deploy on **Vercel** now for the GM pilot; migrate to **Google Cloud Run**
 - **`lib/drive.ts`**: `uploadReceiptFile` — finds-or-creates a month subfolder under `GOOGLE_DRIVE_ROOT_FOLDER_ID`, uploads, returns a link.
 - **`lib/receiptDoc.ts`**: `generateReceiptDoc(...)` — ported from `templates/receipt-doc/build.js`, same TDFB header/title/body/footer structure and `id_card_photo` bookmark, now parameterized with real data instead of template tags.
 - **`lib/thaiBahtText.ts`**: `numberToThaiBahtText(amount)` — real Thai digit-reading algorithm (หน่วย/สิบ/ร้อย/พัน/หมื่น/แสน/ล้าน, เอ็ด/ยี่ special cases), verified against the spec's examples (202 → "สองร้อยสองบาทถ้วน", 1250 → "หนึ่งพันสองร้อยห้าสิบบาทถ้วน").
-- **API routes**: `GET/POST /api/expenses`, `POST /api/expenses/[id]/status`, `POST /api/upload`, `POST /api/receipt-doc`.
-- **Pages**: `/login`, `/` (manual-entry expense form — no OCR, all fields directly editable), `/review` (list รอตรวจ rows, mark ตรวจแล้ว/ต้องแก้ไข), `/receipt-doc/create` (generates and downloads the .docx, with a live Thai-baht-text preview).
+- **`lib/ocr.ts` / `POST /api/ocr`**: OCR / AI receipt reading via the Gemini API (`@google/genai`, model `gemini-2.5-flash`) with structured JSON output (`responseMimeType`/`responseSchema`, not prompt-and-hope). Takes a photographed/scanned receipt (JPEG/PNG/PDF) and extracts document type, supplier name (TH/EN), expense detail, bill date, document number, and the three amount fields — converting Thai Buddhist-Era dates (พ.ศ.) to Gregorian and back-calculating VAT from the grand total when it isn't itemized separately. Fields it can't read confidently are left absent rather than guessed, and it self-reports a `high`/`medium`/`low` confidence. `ExpenseForm`'s camera/file-attach buttons call this route and prefill the form (all fields stay editable) — OCR failure degrades to manual entry, it never blocks submission.
+- **API routes**: `GET/POST /api/expenses`, `POST /api/expenses/[id]/status`, `POST /api/upload`, `POST /api/ocr`, `POST /api/receipt-doc`.
+- **Pages**: `/login`, `/` (expense form with camera/file-attach OCR prefill — all fields remain directly editable for review/correction), `/review` (list รอตรวจ rows, mark ตรวจแล้ว/ต้องแก้ไข), `/receipt-doc/create` (generates and downloads the .docx, with a live Thai-baht-text preview).
 
 ## What's stubbed / deferred (follow-up work)
 
-- **OCR / AI receipt reading** — out of scope for this pass by design; the Main page is a manual-entry form for the fields OCR would eventually fill.
 - **Dashboard, Approver, ReportBug pages** — not built in this pass (see `design/*.dc.html` for their mockups); only Login, Main, Review, and CreateReceiptDoc were built.
 - **Real Odoo category list** — `หมวดหมู่ (ตาม Odoo)` is a free-text input; blocked on [`docs/04-open-items.md`](../docs/04-open-items.md) item A ("หมวดหมู่ + Cost Center + Acc name จริงจาก Odoo"). `Cost Center` / `Acc name` columns exist in the schema but have no form fields yet for the same reason.
 - **Duplicate detection** (ชื่อบริษัท + จำนวนเงิน + วันที่ ซ้ำกัน, red-row popup) — the `แจ้งเตือนรายการซ้ำ` column exists in `ExpenseRow` but nothing populates it yet.
@@ -123,3 +124,4 @@ Plan: deploy on **Vercel** now for the GM pilot; migrate to **Google Cloud Run**
 - **Sequential "รหัสรายการ" numbering** — `generateExpenseId()` produces a timestamp-based unique id (`EX-...`), not the sequential `EX-2026-0001`-style id shown in the sheet template's example row; real sequential numbering needs to read the sheet's current max id first.
 - **Uploading the generated เอกสารรับเงิน .docx to Drive** — `/api/receipt-doc` returns the file for direct download only; it does not also upload a copy to Drive and populate the `ลิงก์เอกสารรับเงิน` sheet column.
 - **TDFB logo** — still the `[TDFB LOGO]` placeholder in the generated document, per the known limitation noted in `templates/receipt-doc/README.md`.
+- **OCR accuracy is photo-dependent** — extraction quality depends on photo quality/lighting; handwritten Thai receipts or heavily faded thermal-paper receipts will often need manual correction after prefill. This is expected behavior, not a bug to chase — it's why every OCR-filled field stays editable rather than locked.
