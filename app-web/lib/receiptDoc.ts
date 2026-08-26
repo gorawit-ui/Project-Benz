@@ -58,12 +58,17 @@ function noBorder() {
 }
 
 function thinBorder() {
-  const b = { style: BorderStyle.SINGLE, size: 4, color: "222222" };
+  // 8 = 1pt (BorderStyle sizes are in eighths of a point). The original
+  // template's 4 (0.5pt) is correct per the OOXML spec but renders as
+  // effectively invisible in some mobile viewers (e.g. WPS Office on
+  // Android) — bumped up so the footer/date boxes reliably show a visible
+  // border everywhere, not just in apps that render hairline borders well.
+  const b = { style: BorderStyle.SINGLE, size: 8, color: "222222" };
   return { top: b, left: b, bottom: b, right: b };
 }
 
 function ruleLine() {
-  const line = { style: BorderStyle.SINGLE, size: 6, color: "222222" };
+  const line = { style: BorderStyle.SINGLE, size: 8, color: "222222" };
   const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
