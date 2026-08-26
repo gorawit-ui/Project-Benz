@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { numberToThaiBahtText } from "@/lib/thaiBahtText";
 import type { ExpenseRow } from "@/lib/sheets";
 
 export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName: string }) {
+  const [payeeName, setPayeeName] = useState(defaultPayeeName);
   const [idNumber, setIdNumber] = useState("");
   const [expenseDetail, setExpenseDetail] = useState("");
   const [amountText, setAmountText] = useState("");
@@ -20,15 +21,23 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
   // load this list is a convenience miss only, never blocks the form.
   const [pendingRows, setPendingRows] = useState<ExpenseRow[]>([]);
   const [expenseRowId, setExpenseRowId] = useState("");
+  // The month tab pendingRows was loaded from — needed so linking back to a
+  // row (see /api/receipt-doc's `monthTab` field) writes into the correct
+  // per-month sheet tab instead of being silently skipped.
+  const [pendingRowsMonth, setPendingRowsMonth] = useState<string | null>(null);
+
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/expenses")
-      .then((res) => (res.ok ? res.json() : { rows: [] }))
+      .then((res) => (res.ok ? res.json() : { rows: [], month: null }))
       .then((data) => {
         if (cancelled) return;
         const rows = (data.rows ?? []) as ExpenseRow[];
         setPendingRows(rows.filter((row) => row.status === "รอตรวจ"));
+        setPendingRowsMonth((data.month as string | undefined) ?? null);
       })
       .catch(() => {
         // listing รอตรวจ rows to link is a convenience only — leave the dropdown empty
@@ -58,12 +67,15 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
 
     try {
       const formData = new FormData();
-      formData.append("payeeName", defaultPayeeName);
+      formData.append("payeeName", payeeName);
       formData.append("idNumber", idNumber);
       formData.append("expenseDetail", expenseDetail);
       formData.append("amountNumber", amountText);
       if (idCardImage) formData.append("idCardImage", idCardImage);
-      if (expenseRowId) formData.append("expenseRowId", expenseRowId);
+      if (expenseRowId) {
+        formData.append("expenseRowId", expenseRowId);
+        if (pendingRowsMonth) formData.append("monthTab", pendingRowsMonth);
+      }
 
       const res = await fetch("/api/receipt-doc", { method: "POST", body: formData });
       if (!res.ok) {
@@ -93,7 +105,12 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
     <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
       <div>
         <label className={labelClass}>ชื่อผู้รับเงิน</label>
-        <input className={`${inputClass} bg-zinc-100`} value={defaultPayeeName} readOnly />
+        <input
+          className={inputClass}
+          value={payeeName}
+          onChange={(e) => setPayeeName(e.target.value)}
+          required
+        />
       </div>
 
       <div>
@@ -134,12 +151,71 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
 
       <div>
         <label className={labelClass}>รูปสำเนาบัตรประชาชน</label>
+
+        <div className="mt-1 flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white transition-all duration-150 hover:bg-emerald-800 active:scale-[0.98] active:bg-emerald-900"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 8a2 2 0 0 1 2-2h1.2a2 2 0 0 0 1.66-.9l.6-.9A2 2 0 0 1 11.1 3h1.8a2 2 0 0 1 1.64.87l.6.9a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z" />
+              <circle cx="12" cy="13" r="3.6" />
+            </svg>
+            ถ่ายรูปบัตร
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-zinc-300 bg-white px-4 py-3 text-sm font-semibold text-zinc-700 transition-all duration-150 hover:bg-zinc-50 active:scale-[0.98] active:bg-zinc-100"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+              <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+              <path d="M9 15l1.5-2 1.5 1.8L14 12l3 4" />
+              <circle cx="9.5" cy="10.5" r="1" />
+            </svg>
+            แนบไฟล์
+          </button>
+        </div>
+
+        {/* Rear-camera-first on mobile: accept + capture opens the camera directly. */}
         <input
+          ref={cameraInputRef}
           type="file"
-          accept="image/png,image/jpeg"
-          className="mt-1 block w-full text-sm text-zinc-600"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
           onChange={(e) => setIdCardImage(e.target.files?.[0] ?? null)}
         />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg"
+          className="hidden"
+          onChange={(e) => setIdCardImage(e.target.files?.[0] ?? null)}
+        />
+
+        {idCardImage && <p className="mt-2 truncate text-xs text-zinc-500">ไฟล์ที่แนบ: {idCardImage.name}</p>}
       </div>
 
       <div>
