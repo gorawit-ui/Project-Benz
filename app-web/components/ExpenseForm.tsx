@@ -135,10 +135,10 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
               type="button"
               key={option}
               onClick={() => set("fundType", option)}
-              className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+              className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 ${
                 form.fundType === option
                   ? "border-emerald-700 bg-emerald-700 text-white"
-                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 active:bg-zinc-100"
               }`}
             >
               {option}
@@ -289,7 +289,7 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
       <button
         type="submit"
         disabled={submitting}
-        className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-medium text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-medium text-white transition-all duration-150 hover:bg-emerald-800 active:scale-[0.98] active:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
       >
         {submitting ? "กำลังบันทึก..." : "บันทึกรายการ (รอตรวจ)"}
       </button>

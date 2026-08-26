@@ -2,7 +2,7 @@
 
 import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 export default function LoginPage() {
   return (
@@ -17,6 +17,7 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
+  const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
     if (status === "authenticated" && session) {
@@ -41,10 +42,24 @@ function LoginPageContent() {
         )}
 
         <button
-          onClick={() => signIn("google", { callbackUrl: "/" })}
-          className="mt-8 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 font-medium text-white transition-colors hover:bg-emerald-800"
+          onClick={() => {
+            setSigningIn(true);
+            signIn("google", { callbackUrl: "/" });
+          }}
+          disabled={signingIn}
+          className="mt-8 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 font-medium text-white transition-all duration-150 hover:bg-emerald-800 active:scale-[0.97] active:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-70 disabled:active:scale-100"
         >
-          เข้าสู่ระบบด้วย Google
+          {signingIn ? (
+            <>
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+              กำลังพาไปหน้า Google...
+            </>
+          ) : (
+            "เข้าสู่ระบบด้วย Google"
+          )}
         </button>
 
         <p className="mt-4 text-xs text-zinc-500">รองรับเฉพาะอีเมล @tdfb.co</p>
