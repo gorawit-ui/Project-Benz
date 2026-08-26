@@ -30,6 +30,22 @@ import { numberToThaiBahtText } from "./thaiBahtText";
 
 const FONT = "TH Sarabun New";
 
+// Page is A4 portrait (11906 twips wide) with 1440-twip left/right margins
+// (see the Document's `page` properties below) — 9026 twips of usable
+// content width. Every table/cell below is sized in DXA (absolute twips)
+// derived from this, never WidthType.PERCENTAGE: the docx package renders a
+// percentage width as a literal `w:w="100%"`-style string, which Word and
+// WPS tolerate but Google Docs' .docx importer does not — it silently
+// collapses the cell to near-zero width, forcing every character of the
+// company name onto its own line. Absolute twips are unambiguous everywhere.
+const PAGE_MARGIN = 1440;
+const PAGE_WIDTH = 11906;
+const CONTENT_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2;
+
+function widthDxa(twips: number) {
+  return { size: Math.max(1, Math.round(twips)), type: WidthType.DXA };
+}
+
 // Real TDFB logo (square JPEG) — falls back to a "[TDFB LOGO]" placeholder
 // paragraph if the asset is ever missing, so a bad deploy never crashes doc
 // generation outright.
@@ -71,12 +87,12 @@ function ruleLine() {
   const line = { style: BorderStyle.SINGLE, size: 8, color: "222222" };
   const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: widthDxa(CONTENT_WIDTH),
     rows: [
       new TableRow({
         children: [
           new TableCell({
-            width: { size: 100, type: WidthType.PERCENTAGE },
+            width: widthDxa(CONTENT_WIDTH),
             borders: { top: none, left: none, bottom: line, right: none },
             children: [new Paragraph({ text: "", spacing: { after: 0 } })],
           }),
@@ -91,14 +107,15 @@ function dashedBorder() {
   return { top: b, left: b, bottom: b, right: b };
 }
 
-function dashedBox(cellChildren: Paragraph[], widthPct = 100) {
+/** widthTwips is this box's own outer width (i.e. its parent cell/column's width), not a percentage — see the CONTENT_WIDTH comment above for why. */
+function dashedBox(cellChildren: Paragraph[], widthTwips: number = CONTENT_WIDTH) {
   return new Table({
-    width: { size: widthPct, type: WidthType.PERCENTAGE },
+    width: widthDxa(widthTwips),
     rows: [
       new TableRow({
         children: [
           new TableCell({
-            width: { size: 100, type: WidthType.PERCENTAGE },
+            width: widthDxa(widthTwips),
             borders: dashedBorder(),
             verticalAlign: VerticalAlign.CENTER,
             margins: { top: 120, bottom: 120, left: 120, right: 120 },
@@ -110,15 +127,18 @@ function dashedBox(cellChildren: Paragraph[], widthPct = 100) {
   });
 }
 
+const HEADER_LOGO_WIDTH = Math.round(CONTENT_WIDTH * 0.22);
+const HEADER_TEXT_WIDTH = CONTENT_WIDTH - HEADER_LOGO_WIDTH;
+
 function buildHeaderTable() {
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: widthDxa(CONTENT_WIDTH),
     borders: noBorder(),
     rows: [
       new TableRow({
         children: [
           new TableCell({
-            width: { size: 22, type: WidthType.PERCENTAGE },
+            width: widthDxa(HEADER_LOGO_WIDTH),
             borders: noBorder(),
             verticalAlign: VerticalAlign.CENTER,
             children: logoBuffer
@@ -136,16 +156,19 @@ function buildHeaderTable() {
                   }),
                 ]
               : [
-                  dashedBox([
-                    para([run("[TDFB LOGO]", { size: 20, color: "999999", italics: true })], {
-                      alignment: AlignmentType.CENTER,
-                      spacing: { after: 0 },
-                    }),
-                  ]),
+                  dashedBox(
+                    [
+                      para([run("[TDFB LOGO]", { size: 20, color: "999999", italics: true })], {
+                        alignment: AlignmentType.CENTER,
+                        spacing: { after: 0 },
+                      }),
+                    ],
+                    HEADER_LOGO_WIDTH
+                  ),
                 ],
           }),
           new TableCell({
-            width: { size: 78, type: WidthType.PERCENTAGE },
+            width: widthDxa(HEADER_TEXT_WIDTH),
             borders: noBorder(),
             verticalAlign: VerticalAlign.CENTER,
             children: [
@@ -167,16 +190,19 @@ function buildHeaderTable() {
   });
 }
 
+const DATE_SPACER_WIDTH = Math.round(CONTENT_WIDTH * 0.6);
+const DATE_BOX_WIDTH = CONTENT_WIDTH - DATE_SPACER_WIDTH;
+
 function buildDateTable(dateText: string) {
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: widthDxa(CONTENT_WIDTH),
     borders: noBorder(),
     rows: [
       new TableRow({
         children: [
-          new TableCell({ width: { size: 60, type: WidthType.PERCENTAGE }, borders: noBorder(), children: [new Paragraph("")] }),
+          new TableCell({ width: widthDxa(DATE_SPACER_WIDTH), borders: noBorder(), children: [new Paragraph("")] }),
           new TableCell({
-            width: { size: 40, type: WidthType.PERCENTAGE },
+            width: widthDxa(DATE_BOX_WIDTH),
             borders: thinBorder(),
             margins: { top: 100, bottom: 100, left: 120, right: 120 },
             children: [
@@ -206,36 +232,54 @@ function buildIdPhotoCellContent(idCardImage?: { buffer: Buffer; type: "png" | "
   return new Bookmark({ id: "id_card_photo", children: [] });
 }
 
+const FOOTER_CELL_MARGIN = 160;
+const FOOTER_PHOTO_WIDTH = Math.round(CONTENT_WIDTH * 0.45);
+const FOOTER_SIGNATURE_WIDTH = CONTENT_WIDTH - FOOTER_PHOTO_WIDTH;
+const FOOTER_PHOTO_BOX_WIDTH = FOOTER_PHOTO_WIDTH - FOOTER_CELL_MARGIN * 2;
+
 function buildFooterTable(payeeName: string, idCardImage?: { buffer: Buffer; type: "png" | "jpg" }) {
   const photoNode = buildIdPhotoCellContent(idCardImage);
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: widthDxa(CONTENT_WIDTH),
     borders: thinBorder(),
     rows: [
       new TableRow({
         children: [
           new TableCell({
-            width: { size: 45, type: WidthType.PERCENTAGE },
+            width: widthDxa(FOOTER_PHOTO_WIDTH),
             verticalAlign: VerticalAlign.CENTER,
-            margins: { top: 160, bottom: 160, left: 160, right: 160 },
+            margins: {
+              top: FOOTER_CELL_MARGIN,
+              bottom: FOOTER_CELL_MARGIN,
+              left: FOOTER_CELL_MARGIN,
+              right: FOOTER_CELL_MARGIN,
+            },
             children: [
               para([run("รูปภาพสำเนาบัตรประชาชน", { size: 22 })], {
                 alignment: AlignmentType.CENTER,
                 spacing: { after: 120 },
               }),
-              dashedBox([
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { after: 0 },
-                  children: [photoNode],
-                }),
-              ]),
+              dashedBox(
+                [
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 0 },
+                    children: [photoNode],
+                  }),
+                ],
+                FOOTER_PHOTO_BOX_WIDTH
+              ),
             ],
           }),
           new TableCell({
-            width: { size: 55, type: WidthType.PERCENTAGE },
+            width: widthDxa(FOOTER_SIGNATURE_WIDTH),
             verticalAlign: VerticalAlign.CENTER,
-            margins: { top: 160, bottom: 160, left: 160, right: 160 },
+            margins: {
+              top: FOOTER_CELL_MARGIN,
+              bottom: FOOTER_CELL_MARGIN,
+              left: FOOTER_CELL_MARGIN,
+              right: FOOTER_CELL_MARGIN,
+            },
             children: [
               para([run("รับรองถูกต้องและได้รับเงินครบถ้วนตามจำนวนดังกล่าว")], {
                 alignment: AlignmentType.CENTER,
