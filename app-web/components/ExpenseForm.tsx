@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { DocumentType, ExpenseRow, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { findDuplicateExpense } from "@/lib/duplicateCheck";
@@ -56,7 +56,14 @@ const INITIAL_STATE: FormState = {
 
 type OcrMessage = { type: "success" | "warning" | "error"; text: string };
 
-export default function ExpenseForm({ recordedByName }: { recordedByName: string }) {
+export default function ExpenseForm({
+  recordedByName,
+  initialFile = null,
+}: {
+  recordedByName: string;
+  /** Pre-selected from the capture step (CaptureFlow) — OCR runs on it automatically once, on mount. */
+  initialFile?: File | null;
+}) {
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -81,6 +88,16 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // A file picked on the capture step (CaptureFlow) arrives here already
+  // selected — kick off OCR for it once, the same way handleFileSelected
+  // would for a file picked directly in this form.
+  useEffect(() => {
+    if (initialFile) {
+      handleFileSelected(initialFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
