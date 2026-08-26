@@ -82,6 +82,8 @@ Visit `http://localhost:3000` — you'll be redirected to `/login` if not signed
 
 Plan: deploy on **Vercel** now for the GM pilot; migrate to **Google Cloud Run** in September once the app is functionally complete (see note at the end of this section — nothing here locks the code into Vercel-only APIs, so that move is a hosting change, not a rewrite).
 
+**GM pilot live URL:** https://tdfb-expense-tracking.vercel.app/ — deployed, but `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are still placeholders pending Google Cloud access (owned by an executive account — see the "รอคำตอบจากป๊อป"-style blockers in [`docs/04-open-items.md`](../docs/04-open-items.md)). The Login page renders; actual Google sign-in isn't functional until those two are replaced with real values and the deployment's `/api/auth/callback/google` URL is registered as an authorized redirect URI.
+
 1. **Push to GitHub** — already done, this repo (`gorawit-ui/Project-Benz`) is the source.
 2. **Vercel → Add New Project → Import** this GitHub repo.
 3. **Root Directory — the one setting that's easy to miss**: this repo has `app-web/` as a subfolder, not the Next.js app at the repo root. In the import screen (or later under Project Settings → General → Root Directory), set it to `app-web`. Framework Preset auto-detects as Next.js once that's set.
