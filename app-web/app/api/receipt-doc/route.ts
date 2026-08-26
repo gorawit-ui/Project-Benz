@@ -73,6 +73,11 @@ export async function POST(req: NextRequest) {
     const headers: Record<string, string> = {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "Content-Disposition": `attachment; filename="receipt-doc-${Date.now()}.docx"`,
+      // docDate defaults server-side (today's date) when the form doesn't
+      // send one — the client needs the resolved value to name the
+      // downloaded file consistently with what's printed in the document.
+      // Header values must be ISO-8859-1, so the Thai text is percent-encoded.
+      "X-Doc-Date": encodeURIComponent(docDate),
     };
 
     // Uploading to Drive (and linking to a sheet row) is additive — if any

@@ -13,6 +13,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadFilename, setDownloadFilename] = useState<string>("เอกสารรับเงิน.docx");
   const [driveLink, setDriveLink] = useState<string | null>(null);
   const [linkedExpenseId, setLinkedExpenseId] = useState<string | null>(null);
 
@@ -53,6 +54,18 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
     [amountNumber]
   );
 
+  /** Windows/Mac/Linux all disallow these in filenames; strip rather than reject so a stray character never blocks the download. */
+  function sanitizeForFilename(value: string): string {
+    return value.replace(/[\\/:*?"<>|]/g, "").trim();
+  }
+
+  function buildDownloadFilename(docDate: string): string {
+    const parts = [payeeName, expenseDetail, `${amountNumber.toFixed(2)}บาท`, docDate]
+      .map((part) => sanitizeForFilename(part))
+      .filter(Boolean);
+    return parts.length > 0 ? `${parts.join("_")}.docx` : "เอกสารรับเงิน.docx";
+  }
+
   const inputClass =
     "mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600";
   const labelClass = "block text-sm font-medium text-zinc-700";
@@ -89,9 +102,12 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       // completely unaffected.
       const uploadedLink = res.headers.get("X-Drive-Web-View-Link");
       const linkedId = res.headers.get("X-Linked-Expense-Id");
+      const docDateHeader = res.headers.get("X-Doc-Date");
+      const docDate = docDateHeader ? decodeURIComponent(docDateHeader) : "";
 
       const blob = await res.blob();
       setDownloadUrl(URL.createObjectURL(blob));
+      setDownloadFilename(buildDownloadFilename(docDate));
       if (uploadedLink) setDriveLink(uploadedLink);
       if (linkedId) setLinkedExpenseId(linkedId);
     } catch (err) {
@@ -247,7 +263,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       {downloadUrl && (
         <a
           href={downloadUrl}
-          download="เอกสารรับเงิน.docx"
+          download={downloadFilename}
           className="block w-full rounded-lg border border-emerald-700 px-4 py-3 text-center font-medium text-emerald-700 hover:bg-emerald-50"
         >
           ดาวน์โหลดเอกสารรับเงิน (.docx)
