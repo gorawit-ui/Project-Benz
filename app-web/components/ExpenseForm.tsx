@@ -1,15 +1,23 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import type { DocumentType, FundType } from "@/lib/sheets";
+import type { DocumentType, ExpenseRow, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
+import { findDuplicateExpense } from "@/lib/duplicateCheck";
 
 const DOCUMENT_TYPES: DocumentType[] = ["ใบเสร็จรับเงิน", "ใบกำกับภาษี", "บิลเงินสด"];
 
 const VAT_RATE = 0.07;
+// Fallback only — the real threshold always comes from
+// /api/expenses/petty-cash-status (lib/pettyCash.ts is the source of truth).
+const PETTY_CASH_THRESHOLD_FALLBACK = 20000;
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function formatBaht(n: number): string {
+  return n.toLocaleString("th-TH", { maximumFractionDigits: 0 });
 }
 
 interface FormState {
@@ -56,6 +64,21 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrMessage, setOcrMessage] = useState<OcrMessage | null>(null);
 
+  // เงินสดย่อย vs เงินทดรองจ่าย auto-classification (see lib/pettyCash.ts) —
+  // fundTypeTouched flips true the moment the user clicks a fund-type button
+  // themselves, so auto-classification only ever sets a *default* and never
+  // fights a manual choice afterwards.
+  const [fundTypeTouched, setFundTypeTouched] = useState(false);
+  const [pettyCashContext, setPettyCashContext] = useState<{ usedThisMonth: number; threshold: number } | null>(
+    null
+  );
+
+  // Duplicate-bill detection (see lib/duplicateCheck.ts) — set only when
+  // handleSubmit finds a match; submission is held until the user explicitly
+  // confirms or cancels via the warning box below.
+  const [duplicateMatch, setDuplicateMatch] = useState<ExpenseRow | null>(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
+
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,6 +99,37 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
       }));
     } else {
       set("amountBeforeVat", value);
+    }
+  }
+
+  /**
+   * Calls /api/expenses/petty-cash-status for the given billDate's month,
+   * updates the context note next to the fund-type toggle, and — unless the
+   * user has already manually clicked a fund-type button — auto-selects
+   * เงินสดย่อย/เงินทดรองจ่าย per the confirmed ฿20,000/month rule. A bill is
+   * never split: the whole amount goes to whichever side the running total
+   * lands on. Never throws — a failed classification call just leaves the
+   * current fund-type selection alone.
+   */
+  async function refreshPettyCashClassification(billDate: string, grandTotalValue: string) {
+    const amount = parseFloat(grandTotalValue);
+    if (!billDate || !Number.isFinite(amount) || amount <= 0) return;
+
+    try {
+      const res = await fetch(`/api/expenses/petty-cash-status?billDate=${encodeURIComponent(billDate)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const usedThisMonth = Number(data.usedThisMonth) || 0;
+      const threshold = Number(data.threshold) || PETTY_CASH_THRESHOLD_FALLBACK;
+
+      setPettyCashContext({ usedThisMonth, threshold });
+
+      if (!fundTypeTouched) {
+        const classified: FundType = usedThisMonth + amount <= threshold ? "เงินสดย่อย" : "เงินทดรองจ่าย";
+        set("fundType", classified);
+      }
+    } catch {
+      // auto-classification failing must never block manual entry
     }
   }
 
@@ -101,10 +155,12 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
       setForm((prev) => ({ ...prev, ...patch }));
     }
 
+    let effectiveGrandTotal: number | undefined;
     if (hasBeforeVat && !hasVat && !hasTotal) {
       // OCR only read the pre-VAT amount — reuse the existing auto-calc so
       // vatAmount/grandTotal derive from it exactly like manual entry does.
       handleAmountBeforeVatChange(String(data.amountBeforeVat));
+      effectiveGrandTotal = round2(data.amountBeforeVat! + round2(data.amountBeforeVat! * VAT_RATE));
     } else if (hasBeforeVat || hasVat || hasTotal) {
       // OCR read at least two of the three amounts itself — trust its own
       // read rather than overwriting it with the auto-calc.
@@ -114,6 +170,17 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
         ...(hasVat ? { vatAmount: String(data.vatAmount) } : {}),
         ...(hasTotal ? { grandTotal: String(data.grandTotal) } : {}),
       }));
+      effectiveGrandTotal = hasTotal ? data.grandTotal : undefined;
+    }
+
+    // Right after OCR reads a bill date + total ("หลังถ่ายรูปก็คือเลือกเป็นสิ่งนี้"
+    // per the product owner), auto-classify the fund type. Falls back to
+    // whatever is already in the form when OCR didn't supply a new value.
+    const billDateForClassification = data.billDate ?? form.billDate;
+    const grandTotalForClassification =
+      effectiveGrandTotal !== undefined ? String(effectiveGrandTotal) : form.grandTotal;
+    if (billDateForClassification && grandTotalForClassification) {
+      void refreshPettyCashClassification(billDateForClassification, grandTotalForClassification);
     }
   }
 
@@ -170,9 +237,8 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
     return data.webViewLink as string;
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setMessage(null);
+  /** Actually appends the row — called either directly (no duplicate found) or after an explicit duplicate confirmation. */
+  async function submitExpense(duplicateNote: string) {
     setSubmitting(true);
     try {
       const receiptFileLink = await uploadReceiptIfNeeded();
@@ -186,6 +252,7 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
           vatAmount: Number(form.vatAmount),
           grandTotal: Number(form.grandTotal),
           receiptFileLink,
+          duplicateWarning: duplicateNote,
         }),
       });
 
@@ -198,11 +265,58 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
       setForm(INITIAL_STATE);
       setReceiptFile(null);
       setOcrMessage(null);
+      setDuplicateMatch(null);
+      setFundTypeTouched(false);
+      setPettyCashContext(null);
     } catch (err) {
       setMessage({ type: "error", text: err instanceof Error ? err.message : "เกิดข้อผิดพลาด" });
     } finally {
       setSubmitting(false);
     }
+  }
+
+  /**
+   * Submit entry point: checks for a duplicate (same vendor + amount + bill
+   * date, per lib/duplicateCheck.ts) before actually saving anything. A
+   * match holds submission and shows a warning box requiring an explicit
+   * second confirmation click — no duplicate means normal, frictionless
+   * submission. The duplicate check itself failing (e.g. network hiccup)
+   * must never block a legitimate submission, so it falls through to submit.
+   */
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setMessage(null);
+    setCheckingDuplicate(true);
+    try {
+      const res = await fetch("/api/expenses");
+      if (res.ok) {
+        const data = await res.json();
+        const rows = (data.rows ?? []) as ExpenseRow[];
+        const match = findDuplicateExpense(rows, {
+          supplierNameTh: form.supplierNameTh,
+          grandTotal: Number(form.grandTotal),
+          billDate: form.billDate,
+        });
+        if (match) {
+          setDuplicateMatch(match);
+          return;
+        }
+      }
+    } catch {
+      // duplicate check failing must never block a legitimate submission
+    } finally {
+      setCheckingDuplicate(false);
+    }
+    await submitExpense("");
+  }
+
+  async function confirmDuplicateAndSubmit() {
+    if (!duplicateMatch) return;
+    await submitExpense(`อาจซ้ำกับ ${duplicateMatch.id}`);
+  }
+
+  function cancelDuplicateWarning() {
+    setDuplicateMatch(null);
   }
 
   const inputClass =
@@ -220,7 +334,10 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
             <button
               type="button"
               key={option}
-              onClick={() => set("fundType", option)}
+              onClick={() => {
+                set("fundType", option);
+                setFundTypeTouched(true);
+              }}
               className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 ${
                 form.fundType === option
                   ? "border-emerald-700 bg-emerald-700 text-white"
@@ -231,6 +348,12 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
             </button>
           ))}
         </div>
+        {pettyCashContext && (
+          <p className="mt-1.5 text-xs text-zinc-500">
+            ใช้เงินสดย่อยไปแล้ว ฿{formatBaht(pettyCashContext.usedThisMonth)} เดือนนี้ (เหลือ ฿
+            {formatBaht(Math.max(pettyCashContext.threshold - pettyCashContext.usedThisMonth, 0))}) — เลือกได้เองหากต้องการเปลี่ยน
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -300,6 +423,7 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
             className={inputClass}
             value={form.billDate}
             onChange={(e) => set("billDate", e.target.value)}
+            onBlur={() => void refreshPettyCashClassification(form.billDate, form.grandTotal)}
             required
           />
         </div>
@@ -327,6 +451,7 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
             className={inputClass}
             value={form.amountBeforeVat}
             onChange={(e) => handleAmountBeforeVatChange(e.target.value)}
+            onBlur={() => void refreshPettyCashClassification(form.billDate, form.grandTotal)}
             required
           />
         </div>
@@ -348,6 +473,7 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
             className={inputClass}
             value={form.grandTotal}
             onChange={(e) => set("grandTotal", e.target.value)}
+            onBlur={() => void refreshPettyCashClassification(form.billDate, form.grandTotal)}
           />
         </div>
       </div>
@@ -464,13 +590,43 @@ export default function ExpenseForm({ recordedByName }: { recordedByName: string
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-medium text-white transition-all duration-150 hover:bg-emerald-800 active:scale-[0.98] active:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
-      >
-        {submitting ? "กำลังบันทึก..." : "บันทึกรายการ (รอตรวจ)"}
-      </button>
+      {duplicateMatch && (
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          <p className="font-semibold">รายการนี้อาจซ้ำกับรายการที่มีอยู่แล้ว — กรุณาตรวจสอบก่อนบันทึกต่อ</p>
+          <p className="mt-1">
+            {duplicateMatch.id} — {duplicateMatch.supplierNameTh || duplicateMatch.supplierNameEn} ฿
+            {formatBaht(duplicateMatch.grandTotal)} วันที่ {duplicateMatch.billDate} (สถานะ: {duplicateMatch.status})
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => void confirmDuplicateAndSubmit()}
+              disabled={submitting}
+              className="flex-1 rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              ยืนยันบันทึกต่อแม้จะซ้ำ
+            </button>
+            <button
+              type="button"
+              onClick={cancelDuplicateWarning}
+              disabled={submitting}
+              className="flex-1 rounded-md border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
+            >
+              แก้ไขข้อมูลก่อน
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!duplicateMatch && (
+        <button
+          type="submit"
+          disabled={submitting || checkingDuplicate}
+          className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-medium text-white transition-all duration-150 hover:bg-emerald-800 active:scale-[0.98] active:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+        >
+          {submitting ? "กำลังบันทึก..." : checkingDuplicate ? "กำลังตรวจสอบรายการซ้ำ..." : "บันทึกรายการ (รอตรวจ)"}
+        </button>
+      )}
     </form>
   );
 }

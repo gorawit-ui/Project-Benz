@@ -7,6 +7,7 @@ import { signOut, useSession } from "next-auth/react";
 const LINKS = [
   { href: "/", label: "บันทึกค่าใช้จ่าย" },
   { href: "/review", label: "ตรวจทาน" },
+  { href: "/dashboard", label: "แดชบอร์ด" },
   { href: "/receipt-doc/create", label: "สร้างเอกสารรับเงิน" },
 ];
 

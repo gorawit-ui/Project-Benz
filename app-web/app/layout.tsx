@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Prompt } from "next/font/google";
 import SessionProviderWrapper from "@/components/SessionProviderWrapper";
 import NavBar from "@/components/NavBar";
+import ReportBugButton from "@/components/ReportBugButton";
 import "./globals.css";
 
 // Prompt renders Thai cleanly at every weight and is self-hosted by Next.js
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <SessionProviderWrapper>
           <NavBar />
           <main className="flex-1">{children}</main>
+          <ReportBugButton />
         </SessionProviderWrapper>
       </body>
     </html>

@@ -111,6 +111,7 @@ function columnIndexToLetter(index0: number): string {
 const COLUMN_INDEX = {
   id: 0,
   status: 3,
+  receiptDocLink: 19,
   reviewedBy: 22,
   reviewedAt: 23,
   note: 24,
@@ -301,5 +302,32 @@ export async function updateExpenseRowStatus(
       valueInputOption: "USER_ENTERED",
       data,
     },
+  });
+}
+
+/**
+ * Writes a Drive link into a row's "ลิงก์เอกสารรับเงิน" column, matched by
+ * "รหัสรายการ" (same find-by-id pattern as updateExpenseRowStatus). Used
+ * when a generated เอกสารรับเงิน .docx is linked back to the expense row it
+ * was created for.
+ */
+export async function updateExpenseRowReceiptDocLink(
+  accessToken: string,
+  sheetId: string,
+  rowId: string,
+  link: string
+): Promise<void> {
+  const sheets = sheetsClient(accessToken);
+  const rowNumber = await findRowNumberById(sheets, sheetId, rowId);
+  if (rowNumber === null) {
+    throw new Error(`ไม่พบรายการที่รหัส "${rowId}" ในชีท`);
+  }
+
+  const linkLetter = columnIndexToLetter(COLUMN_INDEX.receiptDocLink);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${SHEET_TAB_NAME}'!${linkLetter}${rowNumber}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[link]] },
   });
 }

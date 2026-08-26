@@ -50,6 +50,7 @@ type ExpenseSubmission = Record<(typeof REQUIRED_FIELDS)[number], unknown> & {
   costCenter?: string;
   accName?: string;
   receiptFileLink?: string;
+  duplicateWarning?: string;
 };
 
 /** POST /api/expenses — validates and appends one manual-entry expense row. */
@@ -98,7 +99,9 @@ export async function POST(req: NextRequest) {
     grandTotal: Number(body.grandTotal),
     receiptFileLink: body.receiptFileLink ? String(body.receiptFileLink) : "",
     receiptDocLink: "",
-    duplicateWarning: "", // duplicate detection is a documented follow-up, see app-web/README.md
+    // Populated client-side by ExpenseForm's pre-submit duplicate check
+    // (lib/duplicateCheck.ts) — empty when no match was found or confirmed.
+    duplicateWarning: body.duplicateWarning ? String(body.duplicateWarning) : "",
     odooId: "",
     reviewedBy: "",
     reviewedAt: "",

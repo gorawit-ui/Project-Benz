@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { numberToThaiBahtText } from "@/lib/thaiBahtText";
+import type { ExpenseRow } from "@/lib/sheets";
 
 export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName: string }) {
   const [idNumber, setIdNumber] = useState("");
@@ -11,6 +12,31 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [driveLink, setDriveLink] = useState<string | null>(null);
+  const [linkedExpenseId, setLinkedExpenseId] = useState<string | null>(null);
+
+  // รอตรวจ rows this เอกสารรับเงิน can optionally be linked to — see
+  // "ผูกกับรายการค่าใช้จ่าย (ถ้ามี)" below. Fetched once on mount; failing to
+  // load this list is a convenience miss only, never blocks the form.
+  const [pendingRows, setPendingRows] = useState<ExpenseRow[]>([]);
+  const [expenseRowId, setExpenseRowId] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/expenses")
+      .then((res) => (res.ok ? res.json() : { rows: [] }))
+      .then((data) => {
+        if (cancelled) return;
+        const rows = (data.rows ?? []) as ExpenseRow[];
+        setPendingRows(rows.filter((row) => row.status === "รอตรวจ"));
+      })
+      .catch(() => {
+        // listing รอตรวจ rows to link is a convenience only — leave the dropdown empty
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const amountNumber = parseFloat(amountText);
   const bahtText = useMemo(
@@ -26,6 +52,8 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
     e.preventDefault();
     setError(null);
     setDownloadUrl(null);
+    setDriveLink(null);
+    setLinkedExpenseId(null);
     setSubmitting(true);
 
     try {
@@ -35,14 +63,25 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       formData.append("expenseDetail", expenseDetail);
       formData.append("amountNumber", amountText);
       if (idCardImage) formData.append("idCardImage", idCardImage);
+      if (expenseRowId) formData.append("expenseRowId", expenseRowId);
 
       const res = await fetch("/api/receipt-doc", { method: "POST", body: formData });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "สร้างเอกสารไม่สำเร็จ");
       }
+
+      // The Drive upload + sheet-link step is additive on the server side and
+      // never fails the response — its outcome (if any) rides along as
+      // headers next to the .docx bytes so the direct-download path below is
+      // completely unaffected.
+      const uploadedLink = res.headers.get("X-Drive-Web-View-Link");
+      const linkedId = res.headers.get("X-Linked-Expense-Id");
+
       const blob = await res.blob();
       setDownloadUrl(URL.createObjectURL(blob));
+      if (uploadedLink) setDriveLink(uploadedLink);
+      if (linkedId) setLinkedExpenseId(linkedId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
     } finally {
@@ -103,6 +142,22 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         />
       </div>
 
+      <div>
+        <label className={labelClass}>ผูกกับรายการค่าใช้จ่าย (ถ้ามี)</label>
+        <select className={inputClass} value={expenseRowId} onChange={(e) => setExpenseRowId(e.target.value)}>
+          <option value="">ไม่ผูกกับรายการใด</option>
+          {pendingRows.map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.id} — {row.supplierNameTh || row.supplierNameEn || "ไม่ระบุซัพพลายเออร์"} ฿
+              {row.grandTotal.toLocaleString("th-TH")} ({row.billDate})
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-zinc-500">
+          เมื่อเลือก ระบบจะบันทึกลิงก์เอกสารรับเงินนี้กลับเข้าไปในรายการที่เลือกโดยอัตโนมัติ
+        </p>
+      </div>
+
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <button
@@ -121,6 +176,18 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         >
           ดาวน์โหลดเอกสารรับเงิน (.docx)
         </a>
+      )}
+
+      {driveLink && (
+        <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <p>
+            อัปโหลดเข้า Drive แล้ว —{" "}
+            <a href={driveLink} target="_blank" rel="noopener noreferrer" className="underline">
+              เปิดไฟล์ใน Drive
+            </a>
+          </p>
+          {linkedExpenseId && <p className="mt-1">บันทึกลิงก์ในรายการ {linkedExpenseId} แล้ว</p>}
+        </div>
       )}
     </form>
   );
