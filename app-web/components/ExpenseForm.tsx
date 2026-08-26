@@ -20,6 +20,19 @@ function formatBaht(n: number): string {
   return n.toLocaleString("th-TH", { maximumFractionDigits: 0 });
 }
 
+/** Money inputs store a plain numeric string (no commas) in state — this only formats it for display, e.g. "8000" -> "8,000". */
+function formatMoneyDisplay(raw: string): string {
+  if (!raw) return raw;
+  const [intPart, ...rest] = raw.split(".");
+  const formattedInt = intPart === "" ? "" : Number(intPart).toLocaleString("en-US");
+  return rest.length > 0 ? `${formattedInt}.${rest.join(".")}` : formattedInt;
+}
+
+/** Strips comma formatting (and any other non-numeric noise) back to the plain numeric string kept in state. */
+function parseMoneyInput(display: string): string {
+  return display.replace(/,/g, "").replace(/[^\d.]/g, "");
+}
+
 interface FormState {
   fundType: FundType;
   documentType: DocumentType;
@@ -463,11 +476,11 @@ export default function ExpenseForm({
         <div>
           <label className={labelClass}>จำนวนเงินก่อน VAT</label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             className={inputClass}
-            value={form.amountBeforeVat}
-            onChange={(e) => handleAmountBeforeVatChange(e.target.value)}
+            value={formatMoneyDisplay(form.amountBeforeVat)}
+            onChange={(e) => handleAmountBeforeVatChange(parseMoneyInput(e.target.value))}
             onBlur={() => void refreshPettyCashClassification(form.billDate, form.grandTotal)}
             required
           />
@@ -475,21 +488,21 @@ export default function ExpenseForm({
         <div>
           <label className={labelClass}>VAT 7%</label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             className={inputClass}
-            value={form.vatAmount}
-            onChange={(e) => set("vatAmount", e.target.value)}
+            value={formatMoneyDisplay(form.vatAmount)}
+            onChange={(e) => set("vatAmount", parseMoneyInput(e.target.value))}
           />
         </div>
         <div>
           <label className={labelClass}>ยอดรวม (Grand Total)</label>
           <input
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             className={inputClass}
-            value={form.grandTotal}
-            onChange={(e) => set("grandTotal", e.target.value)}
+            value={formatMoneyDisplay(form.grandTotal)}
+            onChange={(e) => set("grandTotal", parseMoneyInput(e.target.value))}
             onBlur={() => void refreshPettyCashClassification(form.billDate, form.grandTotal)}
           />
         </div>
