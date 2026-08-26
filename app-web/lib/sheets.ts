@@ -1,5 +1,5 @@
 /**
- * Thin wrapper around the Google Sheets v4 API, scoped to the 25-column
+ * Thin wrapper around the Google Sheets v4 API, scoped to the 26-column
  * "TDFB Expense Tracking" layout defined in docs/03-data-schema.md and built
  * by templates/sheet/build_expense_tracking_sheet.py (see its `groups`
  * variable — this file's COLUMN_HEADERS mirrors that column order exactly).
@@ -14,6 +14,9 @@ import { isMonthTabName } from "./month";
 export type FundType = "เงินสดย่อย" | "เงินทดรองจ่าย";
 export type DocumentType = "ใบเสร็จรับเงิน" | "ใบกำกับภาษี" | "บิลเงินสด";
 export type ExpenseStatus = "รอตรวจ" | "ตรวจแล้ว" | "นับเข้าระบบ" | "ต้องแก้ไข";
+// Only meaningful for fundType === "เงินทดรองจ่าย" (the employee paid out of
+// pocket and is owed a reimbursement) — ignored for "เงินสดย่อย" rows.
+export type RepaymentStatus = "จ่ายคืนแล้ว" | "ยังไม่จ่ายคืน";
 
 /**
  * One row of the Expense Tracking sheet, field order matches the 25 columns
@@ -62,9 +65,12 @@ export interface ExpenseRow {
   reviewedBy: string; // ผู้ตรวจทาน
   reviewedAt: string; // วันที่ตรวจทาน
   note: string; // หมายเหตุ
+
+  // ติดตามการจ่ายคืน (เฉพาะเงินทดรองจ่าย)
+  repaymentStatus: RepaymentStatus; // สถานะจ่ายคืน
 }
 
-/** Literal Thai column headers, in exact sheet order (columns A..Y). */
+/** Literal Thai column headers, in exact sheet order (columns A..Z). */
 export const COLUMN_HEADERS = [
   "รหัสรายการ",
   "วันที่บันทึกเข้าระบบ",
@@ -91,6 +97,7 @@ export const COLUMN_HEADERS = [
   "ผู้ตรวจทาน",
   "วันที่ตรวจทาน",
   "หมายเหตุ",
+  "สถานะจ่ายคืน (เฉพาะเงินทดรองจ่าย)",
 ] as const;
 
 // Matches ws.title in templates/sheet/build_expense_tracking_sheet.py. This
@@ -105,12 +112,13 @@ const TEMPLATE_TAB_NAME = "Expense Tracking";
 // headers/example row (see build_expense_tracking_sheet.py: group_row=4,
 // header_row=5, example_row=6) — real data starts at row 7. If a production
 // sheet is built differently, adjust this constant.
+const HEADER_ROW = 5;
 const DATA_START_ROW = 7;
-// Column A..Y (25 columns).
-const LAST_COLUMN_LETTER = "Y";
+// Column A..Z (26 columns).
+const LAST_COLUMN_LETTER = "Z";
 
 function columnIndexToLetter(index0: number): string {
-  // 0 -> A, 24 -> Y
+  // 0 -> A, 25 -> Z
   return String.fromCharCode("A".charCodeAt(0) + index0);
 }
 
@@ -122,6 +130,7 @@ const COLUMN_INDEX = {
   reviewedBy: 22,
   reviewedAt: 23,
   note: 24,
+  repaymentStatus: 25,
 } as const;
 
 function sheetsClient(accessToken: string): sheets_v4.Sheets {
@@ -158,6 +167,7 @@ export function rowToValues(row: ExpenseRow): (string | number)[] {
     row.reviewedBy,
     row.reviewedAt,
     row.note,
+    row.repaymentStatus,
   ];
 }
 
@@ -168,6 +178,13 @@ function toNumber(value: unknown): number {
 
 function toStr(value: unknown): string {
   return value === undefined || value === null ? "" : String(value);
+}
+
+// Older rows (written before this column existed) have no cell here at all —
+// treat anything other than the literal "จ่ายคืนแล้ว" as still outstanding,
+// which is the correct default (nothing has been marked repaid yet).
+function toRepaymentStatus(value: unknown): RepaymentStatus {
+  return toStr(value) === "จ่ายคืนแล้ว" ? "จ่ายคืนแล้ว" : "ยังไม่จ่ายคืน";
 }
 
 /** Parses one raw sheet row (array of cell values) back into an ExpenseRow. */
@@ -198,6 +215,7 @@ export function valuesToRow(values: unknown[]): ExpenseRow {
     reviewedBy: toStr(values[22]),
     reviewedAt: toStr(values[23]),
     note: toStr(values[24]),
+    repaymentStatus: toRepaymentStatus(values[25]),
   };
 }
 
@@ -206,6 +224,36 @@ export function valuesToRow(values: unknown[]): ExpenseRow {
  * to read the sheet's current max id first; left as a follow-up. */
 export function generateExpenseId(): string {
   return `EX-${Date.now().toString(36).toUpperCase()}`;
+}
+
+/**
+ * Writes the "สถานะจ่ายคืน" header into `tabName`'s header row if that cell
+ * is still blank. Exists so tabs created before this column was added (the
+ * template tab, and every month tab duplicated from it before today) pick up
+ * the header the first time they're touched, without a manual migration —
+ * the app never requires the header cell to be present to read/write the
+ * data column itself (Sheets allows writing to any cell), this only keeps
+ * the header label visible to humans opening the sheet directly.
+ */
+async function ensureRepaymentStatusHeader(
+  sheets: sheets_v4.Sheets,
+  sheetId: string,
+  tabName: string
+): Promise<void> {
+  const letter = columnIndexToLetter(COLUMN_INDEX.repaymentStatus);
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: `'${tabName}'!${letter}${HEADER_ROW}`,
+  });
+  const current = res.data.values?.[0]?.[0];
+  if (current) return;
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${tabName}'!${letter}${HEADER_ROW}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[COLUMN_HEADERS[COLUMN_INDEX.repaymentStatus]]] },
+  });
 }
 
 /**
@@ -229,8 +277,17 @@ export async function ensureMonthTabExists(
   });
   const allSheets = meta.data.sheets ?? [];
 
+  if (allSheets.some((s) => s.properties?.title === TEMPLATE_TAB_NAME)) {
+    // Heal the template tab too, so every month tab duplicated from here on
+    // already carries the header — cheap (a single-cell read) and idempotent.
+    await ensureRepaymentStatusHeader(sheets, sheetId, TEMPLATE_TAB_NAME);
+  }
+
   const alreadyExists = allSheets.some((s) => s.properties?.title === monthTabName);
-  if (alreadyExists) return;
+  if (alreadyExists) {
+    await ensureRepaymentStatusHeader(sheets, sheetId, monthTabName);
+    return;
+  }
 
   const template = allSheets.find((s) => s.properties?.title === TEMPLATE_TAB_NAME);
   const templateSheetId = template?.properties?.sheetId;
@@ -431,5 +488,34 @@ export async function updateExpenseRowReceiptDocLink(
     range: `'${tabName}'!${linkLetter}${rowNumber}`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [[link]] },
+  });
+}
+
+/**
+ * Marks a "เงินทดรองจ่าย" row as repaid (or not), matched by "รหัสรายการ"
+ * (same find-by-id pattern as updateExpenseRowStatus). `tabName` identifies
+ * which month tab the row lives in.
+ */
+export async function updateExpenseRowRepaymentStatus(
+  accessToken: string,
+  sheetId: string,
+  tabName: string,
+  rowId: string,
+  repaymentStatus: RepaymentStatus
+): Promise<void> {
+  const sheets = sheetsClient(accessToken);
+  const rowNumber = await findRowNumberById(sheets, sheetId, tabName, rowId);
+  if (rowNumber === null) {
+    throw new Error(`ไม่พบรายการที่รหัส "${rowId}" ในชีท`);
+  }
+
+  await ensureRepaymentStatusHeader(sheets, sheetId, tabName);
+
+  const letter = columnIndexToLetter(COLUMN_INDEX.repaymentStatus);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${tabName}'!${letter}${rowNumber}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[repaymentStatus]] },
   });
 }

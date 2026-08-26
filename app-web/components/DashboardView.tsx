@@ -36,6 +36,8 @@ export default function DashboardView() {
   const [vendorSearch, setVendorSearch] = useState<string>("");
   const [months, setMonths] = useState<string[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [repaymentBusyId, setRepaymentBusyId] = useState<string | null>(null);
+  const [repaymentError, setRepaymentError] = useState<string | null>(null);
 
   async function loadRows(month: string) {
     setError(null);
@@ -86,6 +88,31 @@ export default function DashboardView() {
     await loadRows(month);
   }
 
+  async function handleToggleRepayment(row: ExpenseRow) {
+    const nextStatus = row.repaymentStatus === "จ่ายคืนแล้ว" ? "ยังไม่จ่ายคืน" : "จ่ายคืนแล้ว";
+    setRepaymentError(null);
+    setRepaymentBusyId(row.id);
+    // Optimistic update so the ค้างจ่ายคืน total reacts immediately.
+    setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, repaymentStatus: nextStatus } : r)));
+    try {
+      const res = await fetch(`/api/expenses/${encodeURIComponent(row.id)}/repayment-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repaymentStatus: nextStatus, monthTab: selectedMonth }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "อัปเดตสถานะจ่ายคืนไม่สำเร็จ");
+      }
+    } catch (err) {
+      // Revert on failure.
+      setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, repaymentStatus: row.repaymentStatus } : r)));
+      setRepaymentError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    } finally {
+      setRepaymentBusyId(null);
+    }
+  }
+
   const pettyCashTotal = useMemo(
     () => sumGrandTotal((rows ?? []).filter((r) => r.fundType === "เงินสดย่อย")),
     [rows]
@@ -95,14 +122,18 @@ export default function DashboardView() {
     () => (rows ?? []).filter((r) => r.fundType === "เงินทดรองจ่าย"),
     [rows]
   );
-  const advanceTotal = useMemo(() => sumGrandTotal(advanceRows), [advanceRows]);
+  const unpaidAdvanceRows = useMemo(
+    () => advanceRows.filter((r) => r.repaymentStatus !== "จ่ายคืนแล้ว"),
+    [advanceRows]
+  );
+  const advanceTotal = useMemo(() => sumGrandTotal(unpaidAdvanceRows), [unpaidAdvanceRows]);
   const advanceByPerson = useMemo(() => {
     const totals = new Map<string, number>();
-    for (const r of advanceRows) {
+    for (const r of unpaidAdvanceRows) {
       totals.set(r.recordedBy, (totals.get(r.recordedBy) ?? 0) + r.grandTotal);
     }
     return [...totals.entries()].sort((a, b) => b[1] - a[1]);
-  }, [advanceRows]);
+  }, [unpaidAdvanceRows]);
 
   // Category totals — Odoo budgets per category aren't wired up yet, so this
   // is a simple "spent so far" total per category, not spent-vs-budget.
@@ -233,6 +264,34 @@ export default function DashboardView() {
               ))}
             </div>
           )}
+          {repaymentError && <p className="mt-3 text-xs text-red-600">{repaymentError}</p>}
+          {unpaidAdvanceRows.length > 0 ? (
+            <ul className="mt-3 max-h-56 space-y-1.5 overflow-y-auto border-t border-zinc-100 pt-3">
+              {unpaidAdvanceRows.map((row) => (
+                <li key={row.id} className="flex items-center justify-between gap-2 text-sm">
+                  <label className="flex min-w-0 items-center gap-2 text-zinc-600">
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      disabled={repaymentBusyId === row.id}
+                      onChange={() => handleToggleRepayment(row)}
+                      className="h-4 w-4 rounded border-zinc-300 accent-emerald-600"
+                    />
+                    <span className="truncate">
+                      {row.recordedBy} · {row.billDate}
+                    </span>
+                  </label>
+                  <span className="shrink-0 font-medium text-zinc-800">{formatCompactBaht(row.grandTotal)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            advanceRows.length > 0 && (
+              <p className="mt-3 border-t border-zinc-100 pt-3 text-xs text-zinc-400">
+                จ่ายคืนครบทุกรายการแล้ว
+              </p>
+            )
+          )}
         </div>
       </div>
 
@@ -296,12 +355,13 @@ export default function DashboardView() {
               <th className="px-4 py-3">ยอดเงิน</th>
               <th className="px-4 py-3">ประเภทเงิน</th>
               <th className="px-4 py-3">สถานะ</th>
+              <th className="px-4 py-3">จ่ายคืน</th>
             </tr>
           </thead>
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-zinc-400">
+                <td colSpan={8} className="px-4 py-6 text-center text-zinc-400">
                   ไม่พบรายการ
                 </td>
               </tr>
@@ -321,6 +381,24 @@ export default function DashboardView() {
                     <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_BADGE[row.status]}`}>
                       {row.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.fundType === "เงินทดรองจ่าย" ? (
+                      <button
+                        type="button"
+                        disabled={repaymentBusyId === row.id}
+                        onClick={() => handleToggleRepayment(row)}
+                        className={`rounded-full px-3 py-1 text-xs font-medium disabled:opacity-50 ${
+                          row.repaymentStatus === "จ่ายคืนแล้ว"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-zinc-100 text-zinc-500"
+                        }`}
+                      >
+                        {row.repaymentStatus === "จ่ายคืนแล้ว" ? "จ่ายคืนแล้ว" : "ยังไม่จ่ายคืน"}
+                      </button>
+                    ) : (
+                      <span className="text-zinc-300">-</span>
+                    )}
                   </td>
                 </tr>
               ))

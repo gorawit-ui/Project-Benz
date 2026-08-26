@@ -123,6 +123,7 @@ export async function POST(req: NextRequest) {
     reviewedBy: "",
     reviewedAt: "",
     note: "",
+    repaymentStatus: "ยังไม่จ่ายคืน",
   };
 
   try {
