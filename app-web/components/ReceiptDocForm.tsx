@@ -59,8 +59,9 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
     return value.replace(/[\\/:*?"<>|]/g, "").trim();
   }
 
-  function buildDownloadFilename(docDate: string): string {
-    const parts = [payeeName, expenseDetail, `${amountNumber.toFixed(2)}บาท`, docDate]
+  /** compactDocDate is "YYYYMMDD" (e.g. "20260826"), from the server's X-Doc-Date-Compact header. */
+  function buildDownloadFilename(compactDocDate: string): string {
+    const parts = [payeeName, expenseDetail, `${Math.round(amountNumber)}บาท`, compactDocDate]
       .map((part) => sanitizeForFilename(part))
       .filter(Boolean);
     return parts.length > 0 ? `${parts.join("_")}.docx` : "เอกสารรับเงิน.docx";
@@ -102,12 +103,11 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       // completely unaffected.
       const uploadedLink = res.headers.get("X-Drive-Web-View-Link");
       const linkedId = res.headers.get("X-Linked-Expense-Id");
-      const docDateHeader = res.headers.get("X-Doc-Date");
-      const docDate = docDateHeader ? decodeURIComponent(docDateHeader) : "";
+      const compactDocDate = res.headers.get("X-Doc-Date-Compact") ?? "";
 
       const blob = await res.blob();
       setDownloadUrl(URL.createObjectURL(blob));
-      setDownloadFilename(buildDownloadFilename(docDate));
+      setDownloadFilename(buildDownloadFilename(compactDocDate));
       if (uploadedLink) setDriveLink(uploadedLink);
       if (linkedId) setLinkedExpenseId(linkedId);
     } catch (err) {

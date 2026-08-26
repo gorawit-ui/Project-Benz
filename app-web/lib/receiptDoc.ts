@@ -196,7 +196,7 @@ function buildDateTable(dateText: string) {
             borders: noBorder(),
             margins: { top: 100, bottom: 100, left: 120, right: 120 },
             children: [
-              para([run("วันที่ "), run(dateText, { bold: true })], {
+              para([run("วันที่ "), run(dateText, { bold: true, underline: {} })], {
                 alignment: AlignmentType.CENTER,
                 spacing: { after: 0 },
               }),
@@ -335,27 +335,30 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
     para(
       [
         run("ข้าพเจ้า "),
-        run(data.payeeName),
+        run(data.payeeName, { underline: {} }),
         run("     เลขประจำตัวประชาชน "),
-        run(data.idNumber),
+        run(data.idNumber, { underline: {} }),
       ],
-      { alignment: AlignmentType.JUSTIFIED }
+      { alignment: AlignmentType.THAI_DISTRIBUTE }
     ),
 
     para(
-      [run("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า "), run(data.expenseDetail)],
-      { alignment: AlignmentType.JUSTIFIED }
+      [
+        run("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า "),
+        run(data.expenseDetail, { underline: {} }),
+      ],
+      { alignment: AlignmentType.THAI_DISTRIBUTE }
     ),
 
     para(
       [
         run("เป็นจำนวนเงิน "),
-        run(amountNumberText),
+        run(amountNumberText, { underline: {} }),
         run(" บาท ("),
-        run(amountText),
+        run(amountText, { underline: {} }),
         run(")"),
       ],
-      { alignment: AlignmentType.JUSTIFIED, spacing: { after: 280 } }
+      { alignment: AlignmentType.THAI_DISTRIBUTE, spacing: { after: 280 } }
     ),
 
     para([run("เอกสารแนบ", { bold: true, size: 32 })], { spacing: { after: 140 } }),

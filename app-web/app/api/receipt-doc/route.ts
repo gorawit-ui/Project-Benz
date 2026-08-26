@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getTeamByKey } from "@/lib/teams";
 import { generateReceiptDoc } from "@/lib/receiptDoc";
-import { formatThaiBuddhistDate } from "@/lib/thaiDate";
+import { formatThaiBuddhistDate, formatYyyymmdd } from "@/lib/thaiDate";
 import { uploadReceiptFile } from "@/lib/drive";
 import { updateExpenseRowReceiptDocLink } from "@/lib/sheets";
 
@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
   const idNumber = ((formData.get("idNumber") as string) || "").trim();
   const expenseDetail = ((formData.get("expenseDetail") as string) || "").trim();
   const amountNumber = Number(formData.get("amountNumber") ?? NaN);
-  const docDate = ((formData.get("docDate") as string) || "").trim() || formatThaiBuddhistDate(new Date());
+  const now = new Date();
+  const docDate = ((formData.get("docDate") as string) || "").trim() || formatThaiBuddhistDate(now);
   const expenseRowId = ((formData.get("expenseRowId") as string) || "").trim();
   const monthTab = ((formData.get("monthTab") as string) || "").trim();
 
@@ -78,6 +79,9 @@ export async function POST(req: NextRequest) {
       // downloaded file consistently with what's printed in the document.
       // Header values must be ISO-8859-1, so the Thai text is percent-encoded.
       "X-Doc-Date": encodeURIComponent(docDate),
+      // Machine-readable companion for the filename (YYYYMMDD) — avoids the
+      // client having to parse the Thai-formatted X-Doc-Date text back apart.
+      "X-Doc-Date-Compact": formatYyyymmdd(now),
     };
 
     // Uploading to Drive (and linking to a sheet row) is additive — if any
