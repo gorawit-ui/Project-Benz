@@ -34,11 +34,14 @@ export const authOptions: NextAuthOptions = {
       authorization: {
         params: {
           scope: GOOGLE_SCOPES,
-          // "offline" + "consent" so Google issues a refresh_token every
-          // time (needed since the app relies on the user's own token
-          // rather than a shared service account).
+          // "offline" so Google issues a refresh_token on the user's FIRST
+          // consent (needed since the app relies on the user's own token
+          // rather than a shared service account). Deliberately NOT setting
+          // prompt: "consent" — that forces Google's "Allow" screen on every
+          // single sign-in even after the user already granted access, which
+          // is annoying for a tool people open daily. Once consent has been
+          // granted once, Google skips straight through on later sign-ins.
           access_type: "offline",
-          prompt: "consent",
         },
       },
     }),
