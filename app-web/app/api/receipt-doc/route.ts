@@ -89,16 +89,21 @@ export async function POST(req: NextRequest) {
     // as it did before this feature existed.
     try {
       const team = getTeamByKey(session.team?.key);
-      if (team?.driveRootFolderId && session.accessToken) {
+      if (team?.driveRootFolderId && team?.sheetId && session.accessToken) {
         const uploaded = await uploadReceiptFile(
           session.accessToken,
+          team.sheetId,
           team.driveRootFolderId,
           RECEIPT_DOC_DRIVE_FOLDER,
           {
             buffer,
             mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
           },
-          `receipt-doc-${sanitizeForFilename(payeeName)}-${Date.now()}.docx`
+          // No ".docx" suffix — Drive converts this into a native Google Doc
+          // (see uploadReceiptFile's convertToGoogleDoc), which renders
+          // cleanly online, unlike its raw-.docx inline preview.
+          `receipt-doc-${sanitizeForFilename(payeeName)}-${Date.now()}`,
+          true
         );
         headers["X-Drive-Web-View-Link"] = uploaded.webViewLink;
 

@@ -519,3 +519,86 @@ export async function updateExpenseRowRepaymentStatus(
     requestBody: { values: [[repaymentStatus]] },
   });
 }
+
+/**
+ * A flat key -> Drive folder ID lookup, stored as plain rows in a dedicated
+ * sheet tab. This exists to work around the app's `drive.file` OAuth scope:
+ * that scope only lets a signed-in user's session see/query Drive files and
+ * folders it itself created (or the user explicitly opened with it) — a
+ * folder one teammate's session created is INVISIBLE to another teammate's
+ * session under the same scope, even though both are members of the same
+ * team and share the same Drive root folder. The net effect, before this
+ * registry existed, was every team member's first upload of the month (or
+ * first bug-report screenshot, etc.) silently creating its OWN duplicate
+ * folder, since each session's "does this folder already exist?" query came
+ * back empty.
+ *
+ * The Sheets API's `spreadsheets` scope has no such per-session isolation —
+ * any user who has been granted access to the spreadsheet can read/write
+ * any of its cells, regardless of who created the spreadsheet or wrote to
+ * it previously. So the FIRST session that resolves a given folder key
+ * creates the Drive folder as before and records its ID here; every
+ * subsequent session (any teammate, any month) just reads the ID straight
+ * from this tab and skips the Drive-side folder search entirely — no
+ * scope-limited query involved, so no more duplicate folders.
+ */
+const DRIVE_FOLDER_REGISTRY_TAB = "_DriveFolders";
+
+async function ensureDriveFolderRegistryTab(sheets: sheets_v4.Sheets, sheetId: string): Promise<void> {
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: sheetId,
+    fields: "sheets.properties(title)",
+  });
+  const exists = (meta.data.sheets ?? []).some((s) => s.properties?.title === DRIVE_FOLDER_REGISTRY_TAB);
+  if (exists) return;
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: sheetId,
+    requestBody: {
+      requests: [{ addSheet: { properties: { title: DRIVE_FOLDER_REGISTRY_TAB, hidden: true } } }],
+    },
+  });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${DRIVE_FOLDER_REGISTRY_TAB}'!A1:B1`,
+    valueInputOption: "RAW",
+    requestBody: { values: [["folderKey", "driveFolderId"]] },
+  });
+}
+
+/** Looks up a previously-registered Drive folder ID for `folderKey`. Returns null if never registered. */
+export async function getDriveFolderId(
+  accessToken: string,
+  sheetId: string,
+  folderKey: string
+): Promise<string | null> {
+  const sheets = sheetsClient(accessToken);
+  await ensureDriveFolderRegistryTab(sheets, sheetId);
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: `'${DRIVE_FOLDER_REGISTRY_TAB}'!A2:B`,
+  });
+  const rows = res.data.values ?? [];
+  const match = rows.find((r) => r && r[0] === folderKey);
+  return match?.[1] ? String(match[1]) : null;
+}
+
+/** Registers `folderId` as the Drive folder for `folderKey`, so every other session reuses it. */
+export async function setDriveFolderId(
+  accessToken: string,
+  sheetId: string,
+  folderKey: string,
+  folderId: string
+): Promise<void> {
+  const sheets = sheetsClient(accessToken);
+  await ensureDriveFolderRegistryTab(sheets, sheetId);
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: sheetId,
+    range: `'${DRIVE_FOLDER_REGISTRY_TAB}'!A:B`,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [[folderKey, folderId]] },
+  });
+}

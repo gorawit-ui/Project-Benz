@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const team = getTeamByKey(session.team?.key);
-  if (!team?.driveRootFolderId) {
+  if (!team?.driveRootFolderId || !team?.sheetId) {
     return NextResponse.json(
       { error: "ยังไม่ได้ตั้งค่าโฟลเดอร์ Google Drive ของทีมนี้" },
       { status: 500 }
@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await uploadReceiptFile(
       session.accessToken,
+      team.sheetId,
       team.driveRootFolderId,
       monthFolderName,
       { buffer, mimeType },
