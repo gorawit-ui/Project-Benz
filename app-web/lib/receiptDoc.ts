@@ -74,6 +74,28 @@ const DOT_PADDING_COLOR = "999999";
 // lines, never a paragraph's one and only line).
 const RIGHT_DOT_LEADER_TAB = [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX, leader: LeaderType.DOT }];
 
+/**
+ * Two-stop tab layout for a value that should visually CENTER within the
+ * gap after a label, dots on both sides: a "\t" before the value jumps to
+ * a CENTER tab stop at `centerPosition` — Word centers the value's text on
+ * that point and fills everything before it with the dot leader — and a
+ * second "\t" right after the value jumps to a RIGHT tab stop at the page's
+ * right margin, dot-leading the gap after it out to whatever follows (the
+ * next label, or nothing, in which case it just reaches the margin).
+ */
+function centeredFieldTabStops(centerPosition: number) {
+  return [
+    { type: TabStopType.CENTER, position: Math.round(centerPosition), leader: LeaderType.DOT },
+    { type: TabStopType.RIGHT, position: TabStopPosition.MAX, leader: LeaderType.DOT },
+  ];
+}
+
+// Where each centered value's tab stop sits, as a fraction of CONTENT_WIDTH
+// — chosen by eye against the fixed label text each field follows (a
+// longer label needs the center point pushed further right).
+const NAME_CENTER_POSITION = CONTENT_WIDTH * 0.38;
+const EXPENSE_DETAIL_CENTER_POSITION = CONTENT_WIDTH * 0.75;
+
 // Real TDFB logo (square JPEG) — falls back to a "[TDFB LOGO]" placeholder
 // paragraph if the asset is ever missing, so a bad deploy never crashes doc
 // generation outright.
@@ -350,7 +372,6 @@ function mimeToDocxImageType(mimeType?: string): "png" | "jpg" {
 export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise<Buffer> {
   const amountText = numberToThaiBahtText(data.amountNumber);
   const amountNumberText = data.amountNumber.toFixed(2);
-  const namePad = dotPadding(data.payeeName, 24);
   const amountPad = dotPadding(amountNumberText, 14);
   const idCardImage = data.idCardImageBuffer
     ? { buffer: data.idCardImageBuffer, type: mimeToDocxImageType(data.idCardImageMimeType) }
@@ -371,22 +392,22 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
     para(
       [
         run("ข้าพเจ้า "),
-        run(namePad.left, { color: DOT_PADDING_COLOR }),
+        run("\t"),
         run(data.payeeName, { underline: {} }),
-        run(namePad.right, { color: DOT_PADDING_COLOR }),
         run("\t     เลขประจำตัวประชาชน "),
         run(data.idNumber, { underline: {} }),
       ],
-      { alignment: AlignmentType.THAI_DISTRIBUTE, tabStops: RIGHT_DOT_LEADER_TAB }
+      { alignment: AlignmentType.THAI_DISTRIBUTE, tabStops: centeredFieldTabStops(NAME_CENTER_POSITION) }
     ),
 
     para(
       [
         run("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า "),
+        run("\t"),
         run(data.expenseDetail, { underline: {} }),
         run("\t"),
       ],
-      { alignment: AlignmentType.THAI_DISTRIBUTE, tabStops: RIGHT_DOT_LEADER_TAB }
+      { alignment: AlignmentType.THAI_DISTRIBUTE, tabStops: centeredFieldTabStops(EXPENSE_DETAIL_CENTER_POSITION) }
     ),
 
     para(
