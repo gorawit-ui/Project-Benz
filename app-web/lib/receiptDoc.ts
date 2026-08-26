@@ -213,6 +213,11 @@ function buildHeaderTable() {
                     ],
                     HEADER_LOGO_WIDTH
                   ),
+                  // A table cell whose content ends in a nested <w:tbl> with
+                  // no trailing paragraph is legal to Word/WPS but rejected
+                  // outright by Google Docs' .docx importer — every nested
+                  // dashedBox() below needs an empty paragraph after it.
+                  new Paragraph({ text: "", spacing: { after: 0 } }),
                 ],
           }),
           new TableCell({
@@ -321,6 +326,7 @@ function buildFooterTable(payeeName: string, idCardImage?: { buffer: Buffer; typ
                 ],
                 FOOTER_PHOTO_BOX_WIDTH
               ),
+              new Paragraph({ text: "", spacing: { after: 0 } }),
             ],
           }),
           new TableCell({
