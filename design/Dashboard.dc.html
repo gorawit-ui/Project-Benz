@@ -1,0 +1,219 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#faf8f4; --surface:#ffffff; --border:#e8e2d6; --border-soft:#f0ebe0;
+    --ink:#221f1a; --ink-soft:#6b6357; --ink-faint:#9a9284;
+    --success:#1f9d63; --success-soft:#e7f6ee;
+    --warning:#b7791f; --warning-soft:#fbf1de;
+    --danger:#c0362c; --danger-soft:#fbebe9;
+    --info:#2f6fb0; --info-soft:#e8f1fb;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Sarabun',sans-serif;color:var(--ink);font-size:14px;}
+  h1,h2,h3,.display{font-family:'Kanit',sans-serif;}
+  a{color:var(--ink);text-decoration:none;}
+  button{font-family:inherit;cursor:pointer;}
+  .nav-item{display:flex;align-items:center;gap:11px;padding:10px 14px;border-radius:10px;font-size:13.5px;font-weight:600;color:var(--ink-soft);}
+  .budget-card{display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:16px;background:var(--surface);border:1px solid var(--border-soft);flex:1;}
+  th{text-align:left;font-size:11.5px;color:var(--ink-faint);font-weight:700;letter-spacing:.02em;padding:0 16px 10px;}
+  td{padding:14px 16px;font-size:13.5px;border-top:1px solid var(--border-soft);}
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:99px;font-size:11.5px;font-weight:700;}
+</style>
+</helmet>
+
+<div style="width:1280px;min-height:800px;background:var(--bg);display:flex;">
+
+  <!-- sidebar -->
+  <div style="width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border-soft);display:flex;flex-direction:column;padding:22px 14px;gap:2px;">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 8px 22px;">
+      <div style="width:30px;height:30px;border-radius:8px;background:{{accent}};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l2 2 4-4"/><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18"/></svg>
+      </div>
+      <span style="font-size:14px;font-weight:700;">TDFB Expense Tracking</span>
+    </div>
+
+    <div class="nav-item" style="background:color-mix(in srgb, {{accent}} 10%, var(--surface));color:{{accent}};">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 10v10"/></svg>
+      ภาพรวม
+    </div>
+    <div class="nav-item">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      รายการทั้งหมด
+    </div>
+    <div class="nav-item">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1z"/></svg>
+      ตั้งค่า
+    </div>
+
+    <div style="flex-grow:1;"></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 8px;border-top:1px solid var(--border-soft);">
+      <div style="width:30px;height:30px;border-radius:50%;background:var(--border-soft);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--ink-soft);">พว</div>
+      <div style="display:flex;flex-direction:column;line-height:1.2;">
+        <span style="font-size:12.5px;font-weight:600;">พิมพ์วดี ว.</span>
+        <span style="font-size:11px;color:var(--ink-faint);">ฝ่ายการตลาด</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- main -->
+  <div style="flex-grow:1;padding:28px 32px;display:flex;flex-direction:column;gap:22px;">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;flex-direction:column;gap:3px;">
+        <h1 style="margin:0;font-size:21px;font-weight:700;">ภาพรวมค่าใช้จ่ายทีม</h1>
+        <span style="font-size:13px;color:var(--ink-soft);">ไตรมาส 3/2569 · อัปเดตล่าสุด 2 นาทีที่แล้ว</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button style="all:unset;box-sizing:border-box;width:40px;height:40px;border-radius:11px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--ink-soft);">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+        </button>
+        <button style="all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:11px 18px;border-radius:12px;background:{{accent}};color:#fff;font-size:13.5px;font-weight:700;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          ถ่ายรูปใบเสร็จใหม่
+        </button>
+      </div>
+    </div>
+
+    <!-- fund hero cards -->
+    <div style="display:flex;gap:14px;">
+
+      <div style="flex:1;display:flex;flex-direction:column;gap:12px;padding:20px;border-radius:18px;background:var(--surface);border:1px solid var(--border-soft);">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:14px;font-weight:700;">เงินสดย่อย</span>
+          <span class="badge" style="background:var(--warning-soft);color:#6b4d15;">ควรเติมเงินภายใน 3 วัน</span>
+        </div>
+        <div style="height:10px;border-radius:99px;background:var(--border-soft);overflow:hidden;"><div style="width:71%;height:100%;background:{{accent}};"></div></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;">
+          <span style="font-size:12px;color:var(--ink-soft);">วงเงินตั้งต้น ฿20,000 · ใช้ไป ฿14,200</span>
+          <span style="font-size:18px;font-weight:700;color:{{accent}};">คงเหลือ ฿5,800</span>
+        </div>
+      </div>
+
+      <div style="flex:1;display:flex;flex-direction:column;gap:12px;padding:20px;border-radius:18px;background:var(--surface);border:1px solid var(--border-soft);">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:14px;font-weight:700;">เงินทดรองจ่าย</span>
+          <span style="font-size:11px;color:var(--ink-faint);font-weight:600;">รอบจ่ายคืนถัดไป 25 ส.ค. 2569</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px;">
+          <span style="font-size:24px;font-weight:700;">฿8,910</span>
+          <span style="font-size:12px;color:var(--ink-soft);">ค้างจ่ายคืน 3 คน</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;color:var(--ink-soft);">พิมพ์วดี ว.</span><span style="font-size:12.5px;font-weight:700;">฿4,830</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;color:var(--ink-soft);">ณัฐชนก พ.</span><span style="font-size:12.5px;font-weight:700;">฿3,600</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;color:var(--ink-soft);">กันต์ สิงห์</span><span style="font-size:12.5px;font-weight:700;">฿480</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- budget summary strip -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <span style="font-size:12.5px;font-weight:700;color:var(--ink-faint);">แยกตามหมวด (ตาม Odoo) · Q3/2569</span>
+      <div style="display:flex;gap:14px;">
+      <div class="budget-card">
+        <span style="font-size:12.5px;font-weight:700;color:var(--ink-soft);">เดินทาง</span>
+        <div style="height:8px;border-radius:99px;background:var(--border-soft);overflow:hidden;"><div style="width:75%;height:100%;background:{{accent}};"></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-size:11px;color:var(--ink-faint);">฿26,250 / ฿35,000</span><span style="font-size:13px;font-weight:700;color:{{accent}};">฿8,750</span></div>
+      </div>
+      <div class="budget-card">
+        <span style="font-size:12.5px;font-weight:700;color:var(--ink-soft);">รับรองลูกค้า</span>
+        <div style="height:8px;border-radius:99px;background:var(--border-soft);overflow:hidden;"><div style="width:41%;height:100%;background:var(--warning);"></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-size:11px;color:var(--ink-faint);">฿8,200 / ฿20,000</span><span style="font-size:13px;font-weight:700;color:var(--warning);">฿11,800</span></div>
+      </div>
+      <div class="budget-card">
+        <span style="font-size:12.5px;font-weight:700;color:var(--ink-soft);">วัสดุสำนักงาน</span>
+        <div style="height:8px;border-radius:99px;background:var(--border-soft);overflow:hidden;"><div style="width:93%;height:100%;background:var(--danger);"></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-size:11px;color:var(--ink-faint);">฿9,300 / ฿10,000</span><span style="font-size:13px;font-weight:700;color:var(--danger);">฿700</span></div>
+      </div>
+      <div class="budget-card">
+        <span style="font-size:12.5px;font-weight:700;color:var(--ink-soft);">อื่นๆ</span>
+        <div style="height:8px;border-radius:99px;background:var(--border-soft);overflow:hidden;"><div style="width:18%;height:100%;background:var(--success);"></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-size:11px;color:var(--ink-faint);">฿1,800 / ฿10,000</span><span style="font-size:13px;font-weight:700;color:var(--success);">฿8,200</span></div>
+      </div>
+      </div>
+    </div>
+
+    <!-- filters -->
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--border);">
+        <span style="font-size:12.5px;color:var(--ink-soft);">หมวดหมู่: ทั้งหมด</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--border);">
+        <span style="font-size:12.5px;color:var(--ink-soft);">ไตรมาส: Q3/2569</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div style="flex-grow:1;"></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--border);width:220px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <span style="font-size:12.5px;color:var(--ink-faint);">ค้นหาร้านค้า...</span>
+      </div>
+    </div>
+
+    <!-- table -->
+    <div style="background:var(--surface);border-radius:16px;border:1px solid var(--border-soft);overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th style="padding-top:16px;">วันที่</th><th style="padding-top:16px;">ผู้บันทึก</th><th style="padding-top:16px;">ร้านค้า</th><th style="padding-top:16px;">หมวดหมู่</th><th style="padding-top:16px;">ยอดเงิน</th><th style="padding-top:16px;">ประเภทเงิน</th><th style="padding-top:16px;">สถานะ</th><th style="padding-top:16px;"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td>12 ส.ค. 2569</td><td>พิมพ์วดี ว.</td><td style="font-weight:600;">ปตท. พหลโยธิน</td><td>เดินทาง</td><td style="font-weight:700;">฿1,250.00</td>
+            <td><span style="font-size:11.5px;color:var(--ink-soft);">เงินทดรองจ่าย</span></td>
+            <td><span class="badge" style="background:var(--warning-soft);color:#6b4d15;"><span style="width:5px;height:5px;border-radius:50%;background:var(--warning);"></span>รอตรวจ</span></td>
+            <td><a style="font-size:12.5px;font-weight:600;color:{{accent}};">ดูรายละเอียด</a></td>
+          </tr>
+          <tr>
+            <td>10 ส.ค. 2569</td><td>ณัฐชนก พ.</td><td style="font-weight:600;">โรงแรมริมน้ำ</td><td>รับรองลูกค้า</td><td style="font-weight:700;">฿3,600.00</td>
+            <td><span style="font-size:11.5px;color:var(--ink-soft);">เงินทดรองจ่าย</span></td>
+            <td><span class="badge" style="background:var(--info-soft);color:var(--info);"><span style="width:5px;height:5px;border-radius:50%;background:var(--info);"></span>ตรวจแล้ว</span></td>
+            <td><a style="font-size:12.5px;font-weight:600;color:{{accent}};">ดูรายละเอียด</a></td>
+          </tr>
+          <tr>
+            <td>8 ส.ค. 2569</td><td>ธนภรณ์ อ.</td><td style="font-weight:600;">ออฟฟิศเมท</td><td>วัสดุสำนักงาน</td><td style="font-weight:700;">฿990.00</td>
+            <td><span style="font-size:11.5px;color:var(--ink-soft);">เงินสดย่อย</span></td>
+            <td><span class="badge" style="background:var(--success-soft);color:var(--success);"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);"></span>นับเข้าระบบ</span></td>
+            <td><a style="font-size:12.5px;font-weight:600;color:{{accent}};">ดูรายละเอียด</a></td>
+          </tr>
+          <tr>
+            <td>3 ส.ค. 2569</td><td>กันต์ สิงห์</td><td style="font-weight:600;">แกร็บ (เดินทาง)</td><td>เดินทาง</td><td style="font-weight:700;">฿480.00</td>
+            <td><span style="font-size:11.5px;color:var(--ink-soft);">เงินทดรองจ่าย</span></td>
+            <td><span class="badge" style="background:var(--danger-soft);color:var(--danger);"><span style="width:5px;height:5px;border-radius:50%;background:var(--danger);"></span>ต้องแก้ไข</span></td>
+            <td><a style="font-size:12.5px;font-weight:600;color:{{accent}};">ดูรายละเอียด</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#146b5c","section":"Brand"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#146b5c',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#faf8f4; --surface:#ffffff; --border:#e8e2d6; --border-soft:#f0ebe0;
+    --ink:#221f1a; --ink-soft:#6b6357; --ink-faint:#9a9284;
+    --danger:#c0362c; --danger-soft:#fbebe9;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Sarabun',sans-serif;color:var(--ink);}
+  h1,h2,h3,.display{font-family:'Kanit',sans-serif;}
+  textarea{font-family:'Sarabun',sans-serif;}
+  button{font-family:inherit;cursor:pointer;}
+</style>
+</helmet>
+
+<div style="width:390px;min-height:700px;background:var(--bg);position:relative;overflow:hidden;">
+
+  <!-- dimmed backdrop (previous screen showing through) -->
+  <div style="position:absolute;inset:0;padding:20px;opacity:0.35;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+      <div style="width:32px;height:32px;border-radius:9px;background:{{accent}};"></div>
+      <div style="display:flex;flex-direction:column;gap:3px;">
+        <div style="width:70px;height:8px;border-radius:3px;background:var(--ink-faint);"></div>
+        <div style="width:110px;height:6px;border-radius:3px;background:var(--ink-faint);"></div>
+      </div>
+    </div>
+    <div style="height:200px;border-radius:20px;background:var(--ink-faint);"></div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(20,18,15,0.45);"></div>
+
+  <!-- bottom sheet -->
+  <div style="position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:22px 22px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,0.15);padding:10px 22px 26px;display:flex;flex-direction:column;gap:16px;">
+
+    <div style="width:36px;height:4px;border-radius:99px;background:var(--border);margin:6px auto 0;"></div>
+
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:38px;height:38px;border-radius:10px;background:var(--danger-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+      </div>
+      <div style="display:flex;flex-direction:column;">
+        <span style="font-size:15.5px;font-weight:700;">แจ้งปัญหา / บัค</span>
+        <span style="font-size:11.5px;color:var(--ink-soft);">ส่งข้อความไปหาผู้ดูแลระบบทันที</span>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:11px;background:var(--bg);border:1px solid var(--border-soft);">
+      <span style="font-size:11.5px;color:var(--ink-faint);font-weight:600;">ส่งถึง</span>
+      <div style="display:flex;align-items:center;gap:6px;padding:3px 10px 3px 4px;border-radius:99px;background:var(--surface);border:1px solid var(--border);">
+        <div style="width:20px;height:20px;border-radius:50%;background:{{accent}};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">B</div>
+        <span style="font-size:12px;font-weight:600;">เบนซ์ · Slack</span>
+      </div>
+    </div>
+
+    <textarea readonly style="width:100%;height:88px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface);padding:12px;font-family:'Sarabun',sans-serif;font-size:13.5px;color:var(--ink-soft);resize:none;">อธิบายปัญหาที่เจอ เช่น "OCR อ่านยอดเงินผิด" หรือ "กดยืนยันแล้วหน้าจอค้าง"...</textarea>
+
+    <button style="all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px;height:40px;border-radius:11px;border:1.5px dashed var(--border);color:var(--ink-soft);font-size:12.5px;font-weight:600;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      แนบภาพหน้าจอ
+    </button>
+
+    <button style="all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px;height:50px;border-radius:13px;background:{{accent}};color:#fff;font-size:14.5px;font-weight:700;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      ส่งไปที่ Slack
+    </button>
+
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#146b5c","section":"Brand"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#146b5c',
+    };
+  }
+}
+</script>
+</body>
+</html>

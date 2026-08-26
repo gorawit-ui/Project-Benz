@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#faf8f4; --surface:#ffffff; --border:#e8e2d6; --border-soft:#f0ebe0;
+    --ink:#221f1a; --ink-soft:#6b6357; --ink-faint:#9a9284;
+    --success:#1f9d63; --success-soft:#e7f6ee;
+    --warning:#b7791f; --warning-soft:#fbf1de;
+    --danger:#c0362c; --danger-soft:#fbebe9;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Sarabun',sans-serif;color:var(--ink);}
+  h1,h2,h3,.display{font-family:'Kanit',sans-serif;}
+  a{color:var(--ink);text-decoration:none;}
+  a:hover{opacity:0.7;}
+  button{font-family:inherit;cursor:pointer;}
+  .field-row{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:12px;background:var(--surface);border:1px solid var(--border-soft);}
+  .field-label{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);font-weight:600;}
+  .field-value{font-size:15px;font-weight:600;}
+  .ocr-tag{font-size:9.5px;font-weight:700;color:#fff;background:var(--ink-faint);padding:1.5px 6px;border-radius:99px;letter-spacing:.02em;}
+</style>
+</helmet>
+
+<div style="width:390px;min-height:900px;background:var(--bg);display:flex;flex-direction:column;">
+
+  <!-- top bar -->
+  <div style="display:flex;align-items:center;gap:12px;padding:20px 20px 6px;">
+    <div style="width:34px;height:34px;border-radius:10px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </div>
+    <div style="display:flex;flex-direction:column;line-height:1.2;">
+      <span style="font-size:16px;font-weight:700;">ตรวจสอบข้อมูล</span>
+      <span style="font-size:12px;color:var(--ink-soft);">ก่อนบันทึกเข้าระบบ</span>
+    </div>
+  </div>
+
+  <!-- receipt preview strip -->
+  <div style="margin:14px 20px 0;padding:12px;border-radius:16px;background:var(--surface);border:1px solid var(--border-soft);display:flex;gap:12px;align-items:center;">
+    <div style="width:46px;height:58px;border-radius:6px;background:#fbfaf7;border:1px solid var(--border);flex-shrink:0;position:relative;overflow:hidden;clip-path:polygon(0% 0%,100% 0%,100% 90%,92% 100%,84% 90%,76% 100%,68% 90%,60% 100%,52% 90%,44% 100%,36% 90%,28% 100%,20% 90%,12% 100%,4% 90%,0% 100%);">
+      <div style="position:absolute;top:7px;left:6px;right:6px;height:2.5px;background:var(--ink-faint);opacity:.5;border-radius:2px;"></div>
+      <div style="position:absolute;top:13px;left:6px;right:10px;height:2px;background:var(--ink-faint);opacity:.35;border-radius:2px;"></div>
+      <div style="position:absolute;top:18px;left:6px;right:16px;height:2px;background:var(--ink-faint);opacity:.35;border-radius:2px;"></div>
+      <div style="position:absolute;top:23px;left:6px;right:6px;height:2px;background:var(--ink-faint);opacity:.5;border-radius:2px;"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;flex-grow:1;">
+      <span style="font-size:13.5px;font-weight:600;">receipt_0842.jpg</span>
+      <div style="display:inline-flex;align-items:center;gap:5px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        <span style="font-size:11.5px;color:var(--success);font-weight:600;">อ่านสำเร็จ · แม่นยำ 94%</span>
+      </div>
+    </div>
+    <a style="font-size:12px;font-weight:600;color:{{accent}};flex-shrink:0;">ดูรูปเต็ม</a>
+  </div>
+
+  <!-- fund type -->
+  <div style="padding:16px 20px 0;display:flex;flex-direction:column;gap:8px;">
+    <span style="font-size:11.5px;color:var(--ink-soft);font-weight:600;">บันทึกเป็น</span>
+    <div style="display:flex;gap:8px;">
+      <button style="all:unset;box-sizing:border-box;flex:1;text-align:center;padding:10px;border-radius:11px;border:1.5px solid var(--border);color:var(--ink-soft);font-size:13px;font-weight:600;">เงินสดย่อย</button>
+      <button style="all:unset;box-sizing:border-box;flex:1;text-align:center;padding:10px;border-radius:11px;border:1.5px solid {{accent}};background:color-mix(in srgb, {{accent}} 10%, var(--surface));color:{{accent}};font-size:13px;font-weight:700;">เงินทดรองจ่าย (จ่ายเอง)</button>
+    </div>
+  </div>
+
+  <!-- form fields -->
+  <div style="padding:14px 20px 6px;display:flex;flex-direction:column;gap:10px;">
+
+    <div class="field-row">
+      <div class="field-label"><span class="ocr-tag">OCR</span>ประเภทเอกสาร</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="field-value">ใบเสร็จรับเงิน</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:10px;">
+      <div class="field-row">
+        <div class="field-label"><span class="ocr-tag">OCR</span>หมวดหมู่ (ตาม Odoo)</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span class="field-value">เดินทาง</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field-label"><span class="ocr-tag">OCR</span>ประเภทย่อย</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span class="field-value" style="font-size:13.5px;">ค่าน้ำมัน</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="field-row" style="background:color-mix(in srgb, {{accent}} 6%, var(--surface));border-color:color-mix(in srgb, {{accent}} 30%, var(--border-soft));">
+      <div class="field-label"><span class="ocr-tag">OCR</span>ยอดเงิน</div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;">
+        <span style="font-size:26px;font-weight:700;color:{{accent}};">฿1,250.00</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:10px;">
+      <div class="field-row">
+        <div class="field-label"><span class="ocr-tag">OCR</span>วันที่</div>
+        <span class="field-value" style="font-size:14px;">12 ส.ค. 2569</span>
+      </div>
+      <div class="field-row">
+        <div class="field-label"><span class="ocr-tag">OCR</span>ร้านค้า</div>
+        <span class="field-value" style="font-size:14px;">ปตท. พหลโยธิน</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- reimbursement hint -->
+  <div style="margin:6px 20px 0;padding:12px 14px;border-radius:12px;background:var(--warning-soft);display:flex;gap:10px;align-items:center;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/></svg>
+    <span style="font-size:12.5px;color:#6b4d15;line-height:1.5;">ยอดทดรองจ่ายสะสมเดือนนี้ก่อนรายการนี้ <strong>฿3,580</strong> · หมวด <strong>เดินทาง</strong></span>
+  </div>
+
+  <div style="flex-grow:1;"></div>
+
+  <!-- actions -->
+  <div style="padding:18px 20px 24px;display:flex;flex-direction:column;gap:10px;">
+    <button style="all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:center;height:52px;border-radius:14px;background:{{accent}};color:#fff;font-size:15px;font-weight:700;">ยืนยันและบันทึกรายการ</button>
+    <a style="text-align:center;font-size:13.5px;color:var(--ink-soft);font-weight:600;padding:6px;">ยกเลิก</a>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#146b5c","section":"Brand"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#146b5c',
+    };
+  }
+}
+</script>
+</body>
+</html>

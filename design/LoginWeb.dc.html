@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#faf8f4; --surface:#ffffff; --border:#e8e2d6; --border-soft:#f0ebe0;
+    --ink:#221f1a; --ink-soft:#6b6357; --ink-faint:#9a9284;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Sarabun',sans-serif;color:var(--ink);}
+  h1,h2,h3,.display{font-family:'Kanit',sans-serif;}
+  button{font-family:inherit;cursor:pointer;}
+</style>
+</helmet>
+
+<div style="width:1280px;min-height:760px;background:var(--bg);display:flex;">
+
+  <!-- brand panel -->
+  <div style="flex:1.4;background:{{accent}};display:flex;flex-direction:column;justify-content:space-between;padding:48px;position:relative;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l2 2 4-4"/><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18"/></svg>
+      </div>
+      <span style="color:#fff;font-size:14px;font-weight:700;">TDFB</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:16px;max-width:420px;">
+      <h1 style="margin:0;color:#fff;font-size:32px;font-weight:700;line-height:1.3;">Expense Tracking</h1>
+      <p style="margin:0;color:rgba(255,255,255,0.85);font-size:15px;line-height:1.7;">ถ่ายรูปใบเสร็จ ระบบแยกหมวดหมู่ให้อัตโนมัติ ดูแลทั้งเงินสดย่อยและเงินทดรองจ่าย พร้อมเห็นภาพงบทีมแบบเรียลไทม์</p>
+    </div>
+
+    <div style="display:flex;gap:28px;">
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <span style="color:#fff;font-size:20px;font-weight:700;">2</span>
+        <span style="color:rgba(255,255,255,0.7);font-size:11.5px;">ประเภทเงินที่ดูแล</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <span style="color:#fff;font-size:20px;font-weight:700;">Real-time</span>
+        <span style="color:rgba(255,255,255,0.7);font-size:11.5px;">อัปเดตงบทันทีที่บันทึก</span>
+      </div>
+    </div>
+
+    <svg width="260" height="260" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1" style="position:absolute;right:-60px;bottom:-60px;">
+      <rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 13h8M8 16h5"/>
+    </svg>
+  </div>
+
+  <!-- login card -->
+  <div style="flex:1;background:var(--surface);display:flex;align-items:center;justify-content:center;padding:48px;">
+    <div style="width:100%;max-width:320px;display:flex;flex-direction:column;align-items:center;gap:26px;">
+
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <h2 style="margin:0;font-size:21px;font-weight:700;">เข้าสู่ระบบ</h2>
+        <span style="font-size:13px;color:var(--ink-soft);text-align:center;">ใช้บัญชี Google ของ TDFB เพื่อยืนยันตัวตน</span>
+      </div>
+
+      <button style="all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;height:50px;border-radius:12px;background:var(--surface);border:1.5px solid var(--border);">
+        <svg width="18" height="18" viewBox="0 0 18 18">
+          <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.617z"/>
+          <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
+          <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+          <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+        </svg>
+        <span style="font-size:14px;font-weight:600;">ลงชื่อเข้าใช้ด้วย Google</span>
+      </button>
+
+      <span style="font-size:11.5px;color:var(--ink-faint);text-align:center;line-height:1.6;">รองรับเฉพาะอีเมล @tdfb.co<br>พร้อมขยายให้ทีมอื่นใช้งานได้ในอนาคต</span>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#146b5c","section":"Brand"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#146b5c',
+    };
+  }
+}
+</script>
+</body>
+</html>

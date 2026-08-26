@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#faf8f4; --surface:#ffffff; --border:#e8e2d6; --border-soft:#f0ebe0;
+    --ink:#221f1a; --ink-soft:#6b6357; --ink-faint:#9a9284;
+    --success:#1f9d63; --success-soft:#e7f6ee;
+    --warning:#b7791f; --warning-soft:#fbf1de;
+    --danger:#c0362c; --danger-soft:#fbebe9;
+    --info:#2f6fb0;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Sarabun',sans-serif;color:var(--ink);}
+  h1,h2,h3,.display{font-family:'Kanit',sans-serif;}
+  a{color:var(--ink);text-decoration:none;}
+  a:hover{opacity:0.7;}
+  button{font-family:inherit;cursor:pointer;}
+</style>
+</helmet>
+
+<div style="width:390px;min-height:820px;background:var(--bg);display:flex;flex-direction:column;position:relative;">
+
+  <!-- top bar -->
+  <div style="display:flex;align-items:center;gap:10px;padding:20px 20px 8px;">
+    <div style="width:32px;height:32px;border-radius:9px;background:{{accent}};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l2 2 4-4"/><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18"/></svg>
+    </div>
+    <div style="display:flex;flex-direction:column;line-height:1.2;">
+      <span style="font-size:11px;color:var(--ink-faint);font-weight:600;letter-spacing:.03em;">TDFB</span>
+      <span style="font-size:15px;font-weight:700;">Expense Tracking</span>
+    </div>
+    <div style="flex-grow:1;"></div>
+    <div style="width:34px;height:34px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--ink-soft);">พว</div>
+  </div>
+
+  <!-- heading -->
+  <div style="padding:14px 20px 6px;display:flex;flex-direction:column;gap:4px;">
+    <h1 style="margin:0;font-size:22px;font-weight:700;">แนบใบเสร็จ</h1>
+    <p style="margin:0;font-size:13.5px;color:var(--ink-soft);line-height:1.5;">ถ่ายรูปหรือแนบไฟล์ใบเสร็จ ระบบจะอ่านและแยกหมวดหมู่ให้อัตโนมัติ ไม่ว่าจะเป็นเงินสดย่อยหรือเงินทดรองจ่าย</p>
+  </div>
+
+  <!-- main capture card -->
+  <div style="padding:18px 20px 10px;display:flex;flex-direction:column;gap:14px;">
+
+    <button style="all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;height:220px;border-radius:20px;background:{{accent}};position:relative;overflow:hidden;">
+      <div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,0.16);display:flex;align-items:center;justify-content:center;">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2a2 2 0 0 0 1.66-.9l.6-.9A2 2 0 0 1 11.1 3h1.8a2 2 0 0 1 1.64.87l.6.9a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z"/><circle cx="12" cy="13" r="3.6"/></svg>
+      </div>
+      <span style="color:#fff;font-size:16px;font-weight:700;">ถ่ายรูปใบเสร็จ</span>
+      <span style="color:rgba(255,255,255,0.75);font-size:12.5px;">แตะเพื่อเปิดกล้อง</span>
+    </button>
+
+    <button style="all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:10px;height:52px;border-radius:14px;background:var(--surface);border:1.5px dashed var(--border);color:var(--ink);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      <span style="font-size:14.5px;font-weight:600;">เลือกรูปจากคลังภาพ</span>
+    </button>
+
+  </div>
+
+  <!-- supported doc types hint -->
+  <div style="margin:2px 20px 0;padding:12px 14px;border-radius:12px;background:var(--surface);border:1px solid var(--border-soft);display:flex;gap:10px;align-items:flex-start;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-faint)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px;"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+    <span style="font-size:12.5px;color:var(--ink-soft);line-height:1.6;">รองรับ: ใบเสร็จรับเงิน, ใบกำกับภาษี, สลิปโอนเงิน — ให้เห็นยอดเงินและวันที่ชัดเจน</span>
+  </div>
+
+  <!-- currently processing card -->
+  <div style="margin:16px 20px 0;padding:14px;border-radius:16px;background:var(--surface);border:1px solid var(--border-soft);display:flex;gap:12px;align-items:center;">
+    <div style="width:52px;height:64px;border-radius:6px;background:#fbfaf7;border:1px solid var(--border);flex-shrink:0;position:relative;overflow:hidden;clip-path:polygon(0% 0%,100% 0%,100% 90%,92% 100%,84% 90%,76% 100%,68% 90%,60% 100%,52% 90%,44% 100%,36% 90%,28% 100%,20% 90%,12% 100%,4% 90%,0% 100%);">
+      <div style="position:absolute;top:8px;left:8px;right:8px;height:3px;background:var(--ink-faint);border-radius:2px;opacity:.5;"></div>
+      <div style="position:absolute;top:16px;left:8px;right:14px;height:2px;background:var(--ink-faint);border-radius:2px;opacity:.35;"></div>
+      <div style="position:absolute;top:22px;left:8px;right:20px;height:2px;background:var(--ink-faint);border-radius:2px;opacity:.35;"></div>
+      <div style="position:absolute;top:30px;left:8px;right:8px;height:2px;background:var(--ink-faint);border-radius:2px;opacity:.5;"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;flex-grow:1;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:13.5px;font-weight:600;">receipt_0842.jpg</span>
+        <span style="font-size:11.5px;color:{{accent}};font-weight:700;">72%</span>
+      </div>
+      <div style="height:6px;border-radius:99px;background:var(--border-soft);overflow:hidden;">
+        <div style="width:72%;height:100%;background:{{accent}};border-radius:99px;"></div>
+      </div>
+      <span style="font-size:11.5px;color:var(--ink-soft);">กำลังอ่านข้อมูลด้วย OCR...</span>
+    </div>
+  </div>
+
+  <div style="flex-grow:1;"></div>
+
+  <button style="all:unset;box-sizing:border-box;position:absolute;right:18px;bottom:18px;width:46px;height:46px;border-radius:50%;background:var(--surface);border:1.5px solid var(--border);box-shadow:0 4px 14px rgba(0,0,0,0.1);display:flex;align-items:center;justify-content:center;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+  </button>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#146b5c","section":"Brand"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#146b5c',
+    };
+  }
+}
+</script>
+</body>
+</html>

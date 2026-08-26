@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#faf8f4; --surface:#ffffff; --border:#e8e2d6; --border-soft:#f0ebe0;
+    --ink:#221f1a; --ink-soft:#6b6357; --ink-faint:#9a9284;
+    --success:#1f9d63; --success-soft:#e7f6ee;
+    --warning:#b7791f; --warning-soft:#fbf1de;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Sarabun',sans-serif;color:var(--ink);}
+  h1,h2,h3,.display{font-family:'Kanit',sans-serif;}
+  button{font-family:inherit;cursor:pointer;}
+  input,textarea{font-family:'Sarabun',sans-serif;}
+  .field{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:12px;background:var(--surface);border:1px solid var(--border-soft);}
+  .field-label{font-size:11.5px;color:var(--ink-soft);font-weight:600;}
+  .field-input{border:none;outline:none;font-size:14.5px;font-weight:600;color:var(--ink);background:transparent;padding:0;width:100%;}
+  .field-input::placeholder{color:var(--ink-faint);font-weight:400;}
+  .readonly-tag{font-size:9.5px;font-weight:700;color:var(--ink-faint);background:var(--border-soft);padding:1.5px 7px;border-radius:99px;}
+</style>
+</helmet>
+
+<div style="width:390px;min-height:900px;background:var(--bg);display:flex;flex-direction:column;">
+
+  <div style="display:flex;align-items:center;gap:12px;padding:20px 20px 6px;">
+    <div style="width:34px;height:34px;border-radius:10px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </div>
+    <div style="display:flex;flex-direction:column;line-height:1.2;">
+      <span style="font-size:16px;font-weight:700;">สร้างเอกสารรับเงิน</span>
+      <span style="font-size:12px;color:var(--ink-soft);">สำหรับกรณีบิลไม่สมบูรณ์</span>
+    </div>
+  </div>
+
+  <div style="margin:14px 20px 0;padding:12px 14px;border-radius:12px;background:var(--warning-soft);display:flex;gap:10px;align-items:flex-start;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px;"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+    <span style="font-size:12.5px;color:#6b4d15;line-height:1.6;">บิลนี้จากร้าน 7-Eleven ไม่มีใบเสร็จ ให้กรอกข้อมูลด้านล่างเพื่อสร้างเอกสารรับเงินแทน</span>
+  </div>
+
+  <div style="padding:16px 20px 6px;display:flex;flex-direction:column;gap:10px;">
+
+    <div class="field">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="field-label">ชื่อผู้รับเงิน</span>
+        <span class="readonly-tag">จาก Google</span>
+      </div>
+      <span style="font-size:14.5px;font-weight:600;color:var(--ink-soft);">พิมพ์วดี วงศ์สุรีย์</span>
+    </div>
+
+    <div class="field">
+      <span class="field-label">เลขประจำตัวประชาชน</span>
+      <input class="field-input" placeholder="x-xxxx-xxxxx-xx-x" value="1-2345-67890-12-3">
+      <span style="font-size:10.5px;color:var(--ink-faint);">กรอกครั้งแรกครั้งเดียว ระบบจะบันทึกไว้ใช้ครั้งต่อไป</span>
+    </div>
+
+    <div class="field">
+      <span class="field-label">ได้รับเงินจากบริษัทเป็นค่า</span>
+      <input class="field-input" value="ซื้ออุปกรณ์ทำความสะอาด ที่ร้าน 7-Eleven">
+    </div>
+
+    <div class="field" style="background:color-mix(in srgb, {{accent}} 6%, var(--surface));border-color:color-mix(in srgb, {{accent}} 30%, var(--border-soft));">
+      <span class="field-label">จำนวนเงิน</span>
+      <div style="display:flex;align-items:baseline;gap:6px;">
+        <span style="font-size:22px;font-weight:700;color:{{accent}};">฿202.00</span>
+      </div>
+      <span style="font-size:11.5px;color:var(--ink-soft);">(สองร้อยสองบาทถ้วน) — แปลงให้อัตโนมัติ</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+      <span style="font-size:11.5px;color:var(--ink-soft);font-weight:600;">รูปสำเนาบัตรประชาชน</span>
+      <button style="all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1.5px dashed var(--border);background:var(--surface);">
+        <div style="width:40px;height:40px;border-radius:10px;background:var(--border-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--ink-soft)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2a2 2 0 0 0 1.66-.9l.6-.9A2 2 0 0 1 11.1 3h1.8a2 2 0 0 1 1.64.87l.6.9a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z"/><circle cx="12" cy="13" r="3.6"/></svg>
+        </div>
+        <span style="font-size:13px;font-weight:600;color:var(--ink-soft);">ถ่ายรูปหรือแนบไฟล์บัตรประชาชน</span>
+      </button>
+    </div>
+
+  </div>
+
+  <div style="flex-grow:1;"></div>
+
+  <div style="padding:18px 20px 26px;display:flex;flex-direction:column;gap:10px;">
+    <button style="all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:center;height:52px;border-radius:14px;background:{{accent}};color:#fff;font-size:15px;font-weight:700;">สร้างเอกสาร</button>
+    <a style="text-align:center;font-size:13.5px;color:var(--ink-soft);font-weight:600;padding:6px;">ยกเลิก</a>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#146b5c","section":"Brand"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#146b5c',
+    };
+  }
+}
+</script>
+</body>
+</html>
