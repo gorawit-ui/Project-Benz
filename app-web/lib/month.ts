@@ -41,6 +41,11 @@ export function formatThaiMonthLabel(date: Date): string {
  * (rather than `new Date(billDate)`) to avoid any timezone-shift risk around
  * local midnight.
  */
+/** True for a string produced by formatThaiMonthLabel/monthLabelForBillDate — used to pick month-data tabs out of a spreadsheet's tab list, ignoring the template tab and any other non-month tab (e.g. a "คำอธิบาย" legend tab). */
+export function isMonthTabName(title: string): boolean {
+  return /^\d{4}-\d{2} /.test(title);
+}
+
 export function monthLabelForBillDate(billDate?: string): string {
   if (billDate) {
     const match = /^(\d{4})-(\d{2})-\d{2}/.exec(billDate.trim());

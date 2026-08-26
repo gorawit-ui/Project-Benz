@@ -9,6 +9,7 @@
  * shared service account).
  */
 import { google, sheets_v4 } from "googleapis";
+import { isMonthTabName } from "./month";
 
 export type FundType = "เงินสดย่อย" | "เงินทดรองจ่าย";
 export type DocumentType = "ใบเสร็จรับเงิน" | "ใบกำกับภาษี" | "บิลเงินสด";
@@ -254,11 +255,14 @@ export async function ensureMonthTabExists(
 }
 
 /**
- * Lists every per-month data tab name in the spreadsheet (i.e. every tab
- * except TEMPLATE_TAB_NAME), sorted most-recent-first. String-sort
- * descending works correctly here because the label format
- * "<YYYY>-<MM> <name>" (see lib/month.ts) is a fixed-width, zero-padded
- * sortable prefix.
+ * Lists every per-month data tab name in the spreadsheet, sorted
+ * most-recent-first. Matches tabs by the "<YYYY>-<MM> <name>" label pattern
+ * (see lib/month.ts's isMonthTabName) rather than merely excluding
+ * TEMPLATE_TAB_NAME — a spreadsheet can carry other non-data tabs (e.g. a
+ * "คำอธิบาย" legend tab explaining the columns) that must never be treated
+ * as a selectable month or read as if it held expense rows. String-sort
+ * descending works correctly on the matched titles because the label's
+ * "<YYYY>-<MM>" prefix is fixed-width and zero-padded.
  */
 export async function listMonthTabNames(accessToken: string, sheetId: string): Promise<string[]> {
   const sheets = sheetsClient(accessToken);
@@ -269,7 +273,7 @@ export async function listMonthTabNames(accessToken: string, sheetId: string): P
   const allSheets = meta.data.sheets ?? [];
   return allSheets
     .map((s) => s.properties?.title)
-    .filter((title): title is string => !!title && title !== TEMPLATE_TAB_NAME)
+    .filter((title): title is string => !!title && isMonthTabName(title))
     .sort((a, b) => b.localeCompare(a));
 }
 
