@@ -12,11 +12,14 @@ import {
   BorderStyle,
   Document,
   ImageRun,
+  LeaderType,
   Packer,
   Paragraph,
   Table,
   TableCell,
   TableRow,
+  TabStopPosition,
+  TabStopType,
   TextRun,
   VerticalAlign,
   WidthType,
@@ -46,6 +49,14 @@ function widthDxa(twips: number) {
   return { size: Math.max(1, Math.round(twips)), type: WidthType.DXA };
 }
 
+// A right tab stop at the page's right margin with a dot leader — appending
+// a "\t" run after a short line's real content stretches it out to the
+// margin with dots filling the gap, so a one-line paragraph still visually
+// spans the full row width instead of stopping wherever its text happens to
+// end (standard AlignmentType justify/thaiDistribute only affects wrapped
+// lines, never a paragraph's one and only line).
+const RIGHT_DOT_LEADER_TAB = [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX, leader: LeaderType.DOT }];
+
 // Real TDFB logo (square JPEG) — falls back to a "[TDFB LOGO]" placeholder
 // paragraph if the asset is ever missing, so a bad deploy never crashes doc
 // generation outright.
@@ -70,7 +81,11 @@ function para(
 
 function noBorder() {
   const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
-  return { top: none, bottom: none, left: none, right: none };
+  // insideHorizontal/insideVertical (the grid lines *between* cells) default
+  // to a visible border in the docx package when a Table's `borders` object
+  // doesn't set them explicitly — top/bottom/left/right alone only turns off
+  // the outer edge, leaving a stray line between cells in a multi-cell row.
+  return { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none };
 }
 
 function ruleLine() {
@@ -336,18 +351,19 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
       [
         run("ข้าพเจ้า "),
         run(data.payeeName, { underline: {} }),
-        run("     เลขประจำตัวประชาชน "),
+        run("\t     เลขประจำตัวประชาชน "),
         run(data.idNumber, { underline: {} }),
       ],
-      { alignment: AlignmentType.THAI_DISTRIBUTE }
+      { alignment: AlignmentType.THAI_DISTRIBUTE, tabStops: RIGHT_DOT_LEADER_TAB }
     ),
 
     para(
       [
         run("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า "),
         run(data.expenseDetail, { underline: {} }),
+        run("\t"),
       ],
-      { alignment: AlignmentType.THAI_DISTRIBUTE }
+      { alignment: AlignmentType.THAI_DISTRIBUTE, tabStops: RIGHT_DOT_LEADER_TAB }
     ),
 
     para(
@@ -357,8 +373,9 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
         run(" บาท ("),
         run(amountText, { underline: {} }),
         run(")"),
+        run("\t"),
       ],
-      { alignment: AlignmentType.THAI_DISTRIBUTE, spacing: { after: 280 } }
+      { alignment: AlignmentType.THAI_DISTRIBUTE, tabStops: RIGHT_DOT_LEADER_TAB, spacing: { after: 280 } }
     ),
 
     para([run("เอกสารแนบ", { bold: true, size: 32 })], { spacing: { after: 140 } }),
