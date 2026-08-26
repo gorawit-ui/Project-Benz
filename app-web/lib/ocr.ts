@@ -33,8 +33,10 @@ export interface ExtractedReceiptData {
 }
 
 // A current, fast, multimodal-capable Gemini model that accepts inline
-// image/PDF bytes alongside a text prompt.
-const MODEL = "gemini-2.5-flash";
+// image/PDF bytes alongside a text prompt. gemini-2.5-flash was retired for
+// new API keys (Gemini API returns 404 "no longer available to new users");
+// gemini-3.6-flash is its replacement per Google's own error message.
+const MODEL = "gemini-3.6-flash";
 
 const DOCUMENT_TYPES: DocumentType[] = ["ใบเสร็จรับเงิน", "ใบกำกับภาษี", "บิลเงินสด"];
 const CONFIDENCE_LEVELS: OcrConfidence[] = ["high", "medium", "low"];
