@@ -62,6 +62,8 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [templateBusy, setTemplateBusy] = useState(false);
   const [templateNotice, setTemplateNotice] = useState<string | null>(null);
+  /** Payee whose delete button is armed and awaiting confirmation. */
+  const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null);
 
   /** Refetches the saved-payee list (after saving one). */
   async function loadTemplates() {
@@ -100,6 +102,40 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
     // Clear any locally-attached file: the saved Drive image is used instead
     // (the server re-reads it by id), and keeping both would be ambiguous.
     setIdCardImage(null);
+  }
+
+  /**
+   * Removes a saved payee from the picker. Two-step (the button arms, then
+   * confirms) because it's destructive and sits right next to the picker —
+   * a stray tap should not silently drop someone's saved details.
+   *
+   * Deletes the sheet entry only: the ID-card image stays in Drive, since
+   * removing a file outright is a bigger step than tidying a dropdown and
+   * isn't what this button promises.
+   */
+  async function handleDeleteTemplate(payeeName: string) {
+    setTemplateBusy(true);
+    setTemplateNotice(null);
+    try {
+      const res = await fetch(`/api/payee-templates?payeeName=${encodeURIComponent(payeeName)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "ลบไม่สำเร็จ");
+      }
+      setTemplates((prev) => prev.filter((t) => t.payeeName !== payeeName));
+      // Clear the selection if the deleted payee was the one in use, but
+      // leave the already-filled fields alone — the user may still be
+      // partway through this document.
+      setSelectedTemplate((prev) => (prev?.payeeName === payeeName ? null : prev));
+      setConfirmDeleteName(null);
+      showToast("ลบข้อมูลผู้รับเงินแล้ว");
+    } catch (err) {
+      setTemplateNotice(err instanceof Error ? err.message : "ลบไม่สำเร็จ");
+    } finally {
+      setTemplateBusy(false);
+    }
   }
 
   /** Saves the current name/ID/card image for reuse next time. */
@@ -256,13 +292,58 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
             ))}
           </select>
           {selectedTemplate && (
-            <p className="mt-2 text-xs text-emerald-800">
-              เติมชื่อและเลขบัตรให้แล้ว
-              {selectedTemplate.idCardFileId
-                ? " · ใช้รูปบัตรที่บันทึกไว้ ไม่ต้องแนบใหม่"
-                : " · ยังไม่มีรูปบัตรที่บันทึกไว้"}
-              {" — เหลือแค่กรอกรายละเอียดกับจำนวนเงิน"}
-            </p>
+            <>
+              <p className="mt-2 text-xs text-emerald-800">
+                เติมชื่อและเลขบัตรให้แล้ว
+                {selectedTemplate.idCardFileId
+                  ? " · ใช้รูปบัตรที่บันทึกไว้ ไม่ต้องแนบใหม่"
+                  : " · ยังไม่มีรูปบัตรที่บันทึกไว้"}
+                {" — เหลือแค่กรอกรายละเอียดกับจำนวนเงิน"}
+              </p>
+
+              {confirmDeleteName === selectedTemplate.payeeName ? (
+                <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2.5">
+                  <p className="text-xs text-red-800">
+                    ลบ &quot;{selectedTemplate.payeeName}&quot; ออกจากรายการที่บันทึกไว้?
+                    <span className="mt-0.5 block text-red-600">
+                      ข้อมูลที่กรอกในฟอร์มนี้ยังอยู่ · บันทึกใหม่ได้ทุกเมื่อ
+                    </span>
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={templateBusy}
+                      onClick={() => void handleDeleteTemplate(selectedTemplate.payeeName)}
+                      className="flex-1 rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
+                    >
+                      {templateBusy ? "กำลังลบ..." : "ยืนยันลบ"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={templateBusy}
+                      onClick={() => setConfirmDeleteName(null)}
+                      className="flex-1 rounded-md border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 sm:flex-none"
+                    >
+                      ยกเลิก
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTemplateNotice(null);
+                    setConfirmDeleteName(selectedTemplate.payeeName);
+                  }}
+                  className="mt-2 text-xs font-medium text-red-600 underline-offset-2 hover:underline"
+                >
+                  ลบชื่อนี้ออกจากรายการ
+                </button>
+              )}
+              {templateNotice && confirmDeleteName === null && (
+                <p className="mt-2 text-xs text-red-600">{templateNotice}</p>
+              )}
+            </>
           )}
         </div>
       )}

@@ -56,7 +56,45 @@ async function ensureTemplateTab(sheets: sheets_v4.Sheets, sheetId: string): Pro
   });
 }
 
-export async function listPayeeTemplates(accessToken: string, sheetId: string): Promise<PayeeTemplate[]> {
+/** A stored template together with the sheet row it actually occupies. */
+export interface PayeeTemplateEntry {
+  template: PayeeTemplate;
+  /** 1-based sheet row, so row 1 is the header. */
+  rowNumber: number;
+}
+
+/**
+ * Turns the raw A2:F values into entries, dropping blank rows but keeping
+ * each surviving row's REAL row number.
+ *
+ * Kept pure and exported so it can be tested directly. This is the part that
+ * bites: filtering blanks makes the array index stop matching the sheet row,
+ * and update/delete address rows by number. Getting it wrong silently
+ * rewrites or deletes a different person's saved ID details.
+ */
+export function parseTemplateRows(values: unknown[][]): PayeeTemplateEntry[] {
+  const entries: PayeeTemplateEntry[] = [];
+  values.forEach((r, i) => {
+    const cells = r ?? [];
+    const payeeName = String(cells[0] ?? "").trim();
+    if (!payeeName) return; // blank row — skipped, but does NOT shift the rest
+    entries.push({
+      rowNumber: i + 2, // +2: values start at A2, and rows are 1-based
+      template: {
+        payeeName: String(cells[0] ?? ""),
+        idNumber: String(cells[1] ?? ""),
+        idCardFileId: String(cells[2] ?? ""),
+        idCardLink: String(cells[3] ?? ""),
+        savedAt: String(cells[4] ?? ""),
+        savedBy: String(cells[5] ?? ""),
+      },
+    });
+  });
+  return entries;
+}
+
+/** Reads every stored template with its true sheet row. */
+async function readTemplateEntries(accessToken: string, sheetId: string): Promise<PayeeTemplateEntry[]> {
   const sheets = sheetsClient(accessToken);
   await ensureTemplateTab(sheets, sheetId);
 
@@ -64,16 +102,11 @@ export async function listPayeeTemplates(accessToken: string, sheetId: string): 
     spreadsheetId: sheetId,
     range: `'${TEMPLATE_TAB}'!A2:F`,
   });
-  return (res.data.values ?? [])
-    .filter((r) => r && String(r[0] ?? "").trim())
-    .map((r) => ({
-      payeeName: String(r[0] ?? ""),
-      idNumber: String(r[1] ?? ""),
-      idCardFileId: String(r[2] ?? ""),
-      idCardLink: String(r[3] ?? ""),
-      savedAt: String(r[4] ?? ""),
-      savedBy: String(r[5] ?? ""),
-    }));
+  return parseTemplateRows((res.data.values ?? []) as unknown[][]);
+}
+
+export async function listPayeeTemplates(accessToken: string, sheetId: string): Promise<PayeeTemplate[]> {
+  return (await readTemplateEntries(accessToken, sheetId)).map((e) => e.template);
 }
 
 /**
@@ -89,8 +122,8 @@ export async function savePayeeTemplate(
   const sheets = sheetsClient(accessToken);
   await ensureTemplateTab(sheets, sheetId);
 
-  const existing = await listPayeeTemplates(accessToken, sheetId);
-  const index = existing.findIndex((t) => t.payeeName === template.payeeName);
+  const existing = await readTemplateEntries(accessToken, sheetId);
+  const match = existing.find((e) => e.template.payeeName === template.payeeName);
   const values = [[
     template.payeeName,
     template.idNumber,
@@ -100,11 +133,11 @@ export async function savePayeeTemplate(
     template.savedBy,
   ]];
 
-  if (index >= 0) {
-    // +2: row 1 is the header, and listPayeeTemplates is 0-based.
+  if (match) {
+    // Address the row by its real number, never by position in the list.
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      range: `'${TEMPLATE_TAB}'!A${index + 2}:F${index + 2}`,
+      range: `'${TEMPLATE_TAB}'!A${match.rowNumber}:F${match.rowNumber}`,
       valueInputOption: "RAW",
       requestBody: { values },
     });
@@ -127,9 +160,9 @@ export async function deletePayeeTemplate(
   payeeName: string
 ): Promise<void> {
   const sheets = sheetsClient(accessToken);
-  const existing = await listPayeeTemplates(accessToken, sheetId);
-  const index = existing.findIndex((t) => t.payeeName === payeeName);
-  if (index < 0) return;
+  const existing = await readTemplateEntries(accessToken, sheetId);
+  const match = existing.find((e) => e.template.payeeName === payeeName);
+  if (!match) return;
 
   const meta = await sheets.spreadsheets.get({
     spreadsheetId: sheetId,
@@ -148,8 +181,10 @@ export async function deletePayeeTemplate(
             range: {
               sheetId: tabId,
               dimension: "ROWS",
-              startIndex: index + 1, // skip the header row
-              endIndex: index + 2,
+              // deleteDimension is 0-based and end-exclusive, so a row
+              // numbered N is [N-1, N).
+              startIndex: match.rowNumber - 1,
+              endIndex: match.rowNumber,
             },
           },
         },
