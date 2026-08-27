@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { numberToThaiBahtText } from "@/lib/thaiBahtText";
 import type { ExpenseRow } from "@/lib/sheets";
+import type { PayeeTemplate } from "@/lib/payeeTemplates";
 
 export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName: string }) {
   const [payeeName, setPayeeName] = useState(defaultPayeeName);
@@ -51,6 +52,89 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Saved ผู้รับเงิน (name + ID number + ID-card image). Picking one fills the
+  // top of the form so only the description and amount are left to type —
+  // re-keying a 13-digit ID and re-shooting the card photo every time was the
+  // slowest, most error-prone part of this form.
+  const [templates, setTemplates] = useState<PayeeTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<PayeeTemplate | null>(null);
+  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
+  const [templateNotice, setTemplateNotice] = useState<string | null>(null);
+
+  /** Refetches the saved-payee list (after saving one). */
+  async function loadTemplates() {
+    try {
+      const res = await fetch("/api/payee-templates");
+      if (!res.ok) return; // convenience only — never blocks the form
+      const data = await res.json();
+      setTemplates((data.templates ?? []) as PayeeTemplate[]);
+    } catch {
+      // ignore: the form still works fully without saved templates
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/payee-templates")
+      .then((res) => (res.ok ? res.json() : { templates: [] }))
+      .then((data) => {
+        if (cancelled) return;
+        setTemplates((data.templates ?? []) as PayeeTemplate[]);
+      })
+      .catch(() => {
+        // saved payees are a convenience only — leave the picker hidden
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function applyTemplate(name: string) {
+    const template = templates.find((t) => t.payeeName === name) ?? null;
+    setSelectedTemplate(template);
+    if (!template) return;
+    setPayeeName(template.payeeName);
+    setIdNumber(template.idNumber);
+    // Clear any locally-attached file: the saved Drive image is used instead
+    // (the server re-reads it by id), and keeping both would be ambiguous.
+    setIdCardImage(null);
+  }
+
+  /** Saves the current name/ID/card image for reuse next time. */
+  async function handleSaveTemplate() {
+    if (!payeeName.trim()) {
+      setTemplateNotice("กรอกชื่อผู้รับเงินก่อนบันทึก");
+      return;
+    }
+    setTemplateBusy(true);
+    setTemplateNotice(null);
+    try {
+      const body = new FormData();
+      body.append("payeeName", payeeName.trim());
+      body.append("idNumber", idNumber.trim());
+      if (idCardImage) body.append("idCardImage", idCardImage);
+      // Preserve the already-stored image when re-saving without a new file.
+      if (selectedTemplate?.payeeName === payeeName.trim()) {
+        body.append("existingIdCardFileId", selectedTemplate.idCardFileId);
+        body.append("existingIdCardLink", selectedTemplate.idCardLink);
+      }
+      const res = await fetch("/api/payee-templates", { method: "POST", body });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "บันทึกไม่สำเร็จ");
+      }
+      const data = await res.json();
+      setSelectedTemplate(data.template as PayeeTemplate);
+      await loadTemplates();
+      showToast("บันทึกข้อมูลผู้รับเงินแล้ว");
+    } catch (err) {
+      setTemplateNotice(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
+    } finally {
+      setTemplateBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +193,11 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       formData.append("expenseDetail", expenseDetail);
       formData.append("amountNumber", amountText);
       if (idCardImage) formData.append("idCardImage", idCardImage);
+      // No fresh photo but a template is in use → let the server pull that
+      // payee's stored card image out of Drive by id.
+      else if (selectedTemplate?.idCardFileId) {
+        formData.append("idCardFileId", selectedTemplate.idCardFileId);
+      }
       if (expenseRowId) {
         formData.append("expenseRowId", expenseRowId);
         if (pendingRowsMonth) formData.append("monthTab", pendingRowsMonth);
@@ -145,6 +234,39 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+      {/* Saved payees — the fast path: pick a person, then only the
+          description and amount are left to fill in. */}
+      {templates.length > 0 && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
+          <label className={labelClass} htmlFor="payee-template">
+            เลือกผู้รับเงินที่บันทึกไว้
+          </label>
+          <select
+            id="payee-template"
+            className={inputClass}
+            value={selectedTemplate?.payeeName ?? ""}
+            onChange={(e) => applyTemplate(e.target.value)}
+          >
+            <option value="">— กรอกใหม่เอง —</option>
+            {templates.map((t) => (
+              <option key={t.payeeName} value={t.payeeName}>
+                {t.payeeName}
+                {t.idNumber ? ` · ${t.idNumber}` : ""}
+              </option>
+            ))}
+          </select>
+          {selectedTemplate && (
+            <p className="mt-2 text-xs text-emerald-800">
+              เติมชื่อและเลขบัตรให้แล้ว
+              {selectedTemplate.idCardFileId
+                ? " · ใช้รูปบัตรที่บันทึกไว้ ไม่ต้องแนบใหม่"
+                : " · ยังไม่มีรูปบัตรที่บันทึกไว้"}
+              {" — เหลือแค่กรอกรายละเอียดกับจำนวนเงิน"}
+            </p>
+          )}
+        </div>
+      )}
+
       <div>
         <label className={labelClass}>ชื่อผู้รับเงิน</label>
         <input
@@ -258,6 +380,53 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         />
 
         {idCardImage && <p className="mt-2 truncate text-xs text-zinc-500">ไฟล์ที่แนบ: {idCardImage.name}</p>}
+        {!idCardImage && selectedTemplate?.idCardLink && (
+          <p className="mt-2 text-xs text-emerald-700">
+            ใช้รูปบัตรที่บันทึกไว้ ·{" "}
+            <a
+              href={selectedTemplate.idCardLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2"
+            >
+              ดูรูป
+            </a>{" "}
+            · แนบไฟล์ใหม่ได้ถ้าต้องการเปลี่ยน
+          </p>
+        )}
+
+        {/* Save this person for next time. Deliberately a button rather than
+            an on-submit side effect: storing someone's ID card is not
+            something to do silently. */}
+        <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+          <label className="flex items-start gap-2 text-sm text-zinc-700">
+            <input
+              type="checkbox"
+              checked={saveAsTemplate}
+              onChange={(e) => setSaveAsTemplate(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-zinc-300 accent-emerald-600"
+            />
+            <span>
+              บันทึกชื่อ เลขบัตร และรูปบัตรของคนนี้ไว้ใช้ครั้งถัดไป
+              <span className="mt-0.5 block text-xs text-zinc-500">
+                ครั้งหน้าเลือกจากรายการด้านบนได้เลย ไม่ต้องกรอกใหม่
+              </span>
+            </span>
+          </label>
+          {saveAsTemplate && (
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => void handleSaveTemplate()}
+                disabled={templateBusy}
+                className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {templateBusy ? "กำลังบันทึก..." : "บันทึกข้อมูลผู้รับเงิน"}
+              </button>
+              {templateNotice && <p className="text-xs text-red-600">{templateNotice}</p>}
+            </div>
+          )}
+        </div>
       </div>
 
       <div>

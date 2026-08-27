@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { getTeamByKey } from "@/lib/teams";
 import { generateReceiptDoc } from "@/lib/receiptDoc";
 import { formatThaiBuddhistDate, formatYyyymmdd } from "@/lib/thaiDate";
-import { uploadReceiptFile } from "@/lib/drive";
+import { uploadReceiptFile, downloadDriveFile } from "@/lib/drive";
 import { updateExpenseRowReceiptDocLink } from "@/lib/sheets";
 
 // Dedicated Drive subfolder (under the team's driveRootFolderId) that every
@@ -55,6 +55,20 @@ export async function POST(req: NextRequest) {
   const idCardImage = formData.get("idCardImage");
   if (idCardImage instanceof File && idCardImage.size > 0) {
     idCardImageBuffer = Buffer.from(await idCardImage.arrayBuffer());
+  } else {
+    // No file attached this time — if the form was filled from a saved payee
+    // template, pull that payee's stored ID-card image back out of Drive so
+    // the document still carries it without re-uploading from the phone.
+    const idCardFileId = ((formData.get("idCardFileId") as string) || "").trim();
+    if (idCardFileId && session.accessToken) {
+      try {
+        idCardImageBuffer = (await downloadDriveFile(session.accessToken, idCardFileId)).buffer;
+      } catch (err) {
+        // A missing/unreadable stored image must not block the document —
+        // receiptDoc.ts falls back to its placeholder box.
+        console.error(`receipt-doc: could not read saved ID card ${idCardFileId}`, err);
+      }
+    }
   }
 
   try {

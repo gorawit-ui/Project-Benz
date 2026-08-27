@@ -150,3 +150,25 @@ export async function uploadReceiptFile(
       `https://drive.google.com/file/d/${uploaded.data.id}/view`,
   };
 }
+
+/**
+ * Fetches a Drive file's bytes. Used to pull a saved ID-card image back out
+ * when a เอกสารรับเงิน is created from a payee template — the template keeps
+ * only the file id, so the image itself is re-read from Drive at generation
+ * time rather than being copied around or re-uploaded by the browser.
+ */
+export async function downloadDriveFile(
+  accessToken: string,
+  fileId: string
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const drive = driveClient(accessToken);
+  const meta = await drive.files.get({ fileId, fields: "mimeType" });
+  const res = await drive.files.get(
+    { fileId, alt: "media" },
+    { responseType: "arraybuffer" }
+  );
+  return {
+    buffer: Buffer.from(res.data as ArrayBuffer),
+    mimeType: meta.data.mimeType ?? "image/jpeg",
+  };
+}
