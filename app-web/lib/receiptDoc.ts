@@ -184,6 +184,68 @@ function drawFilledField(
 }
 
 /**
+ * Draws `label` (plain, static instructional text — assumed to fit on one
+ * line) immediately followed by `value`, word-wrapped across the remaining
+ * width and continuing on full-width lines below as needed, with a
+ * full-width underline under every line of `value` reaching the right
+ * margin — not just as far as the typed text — matching every other
+ * filled-in field in the document (name, ID number, amount). Manual
+ * word-wrap (rather than pdfkit's own continued-text flow) is what makes
+ * that fill-to-margin underline possible here. Returns the height consumed.
+ */
+function drawFilledParagraph(
+  doc: PDFKit.PDFDocument,
+  label: string,
+  value: string,
+  x: number,
+  y: number,
+  width: number,
+  size = BODY_SIZE
+): number {
+  doc.font(FONT_REGULAR).fontSize(size).fillColor(INK);
+  doc.text(label, x, y, { lineBreak: false });
+  const labelWidth = doc.widthOfString(label);
+
+  // The first line has less room than the rest (it shares its width with
+  // the label). A word that doesn't fit there must fall through to a
+  // fresh, full-width line — NOT get force-placed into the narrow first
+  // line regardless of fit, which is what let a long unbroken run of Thai
+  // text overflow past the right margin when the label itself was already
+  // long (e.g. "ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า").
+  const words = value.split(" ");
+  const lines: string[] = [];
+  let current = "";
+  let budget = width - labelWidth;
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (doc.widthOfString(candidate) <= budget) {
+      current = candidate;
+      continue;
+    }
+    // Doesn't fit what's left of the current line — close it out (even if
+    // that leaves an empty first line, when the label alone filled it) and
+    // continue the word on a fresh, full-width line.
+    lines.push(current);
+    current = word;
+    budget = width;
+  }
+  lines.push(current);
+
+  const lineHeight = size * 1.35;
+  doc.save().strokeColor(INK).lineWidth(0.7);
+  lines.forEach((line, i) => {
+    const lineX = i === 0 ? x + labelWidth : x;
+    const lineTopY = y + i * lineHeight;
+    doc.fillColor(INK).text(line, lineX, lineTopY, { lineBreak: false });
+    const underlineY = lineTopY + size * UNDERLINE_DROP;
+    doc.moveTo(lineX, underlineY).lineTo(x + width, underlineY).stroke();
+  });
+  doc.restore();
+
+  return lines.length * lineHeight;
+}
+
+/**
  * Draws the "เป็นจำนวนเงิน [number] บาท ([spelled out])" line with a single
  * underline running from right after the label all the way to the right
  * margin (`x + width`), rather than one underline per run — so a small
@@ -369,16 +431,19 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
   }
 
   // "ได้รับเงินจาก...เป็นค่า" flows directly into the filled-in expense
-  // detail on the same line (continued text), wrapping automatically as a
-  // single paragraph — rather than a separate indented block below — with
-  // only the filled-in part underlined.
-  doc.font(FONT_REGULAR).fontSize(FIELD_SIZE).fillColor(INK);
-  doc.text("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า ", MARGIN, doc.y, {
-    width: CONTENT_WIDTH,
-    continued: true,
-  });
-  doc.text(data.expenseDetail, { underline: true });
-  doc.y += 16;
+  // detail on the same line, wrapping automatically as a single paragraph —
+  // rather than a separate indented block below — with the filled-in part
+  // underlined all the way to the right margin on every line, same as the
+  // other filled-in fields.
+  doc.y += drawFilledParagraph(
+    doc,
+    "ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า ",
+    data.expenseDetail,
+    MARGIN,
+    doc.y,
+    CONTENT_WIDTH,
+    FIELD_SIZE
+  ) + 16;
 
   doc.y += drawAmountLine(doc, amountNumberText, amountText, MARGIN, doc.y, CONTENT_WIDTH, FIELD_SIZE) + 22;
 
