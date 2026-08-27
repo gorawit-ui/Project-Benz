@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ExpenseRow } from "@/lib/sheets";
 
 export default function ReviewList() {
@@ -12,6 +12,21 @@ export default function ReviewList() {
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Floating confirmation that auto-dismisses — reset the timer on each call so two approvals in quick succession don't cut the toast short. */
+  function showToast(message: string) {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast(message);
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 2500);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   async function load(month: string) {
     setError(null);
@@ -76,6 +91,7 @@ export default function ReviewList() {
     try {
       const ok = await updateOne(id, status);
       if (!ok) throw new Error("อัปเดตสถานะไม่สำเร็จ");
+      if (status === "ตรวจแล้ว") showToast("อนุมัติสำเร็จ!");
       await load(selectedMonth);
     } catch (err) {
       setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
@@ -109,6 +125,9 @@ export default function ReviewList() {
       if (failedCount > 0) {
         setError(`อนุมัติไม่สำเร็จ ${failedCount} จาก ${ids.length} รายการ — ลองใหม่อีกครั้งสำหรับรายการที่เหลือ`);
       }
+      if (failedCount < ids.length) {
+        showToast(`อนุมัติสำเร็จ! (${ids.length - failedCount} รายการ)`);
+      }
       setSelectedIds(new Set());
       await load(selectedMonth);
     } finally {
@@ -130,9 +149,29 @@ export default function ReviewList() {
     </select>
   );
 
+  // Floating, auto-dismissing confirmation — rendered in every branch below
+  // so it stays visible across the reload that follows a successful
+  // approve (including the "no pending left" branch the list lands on once
+  // the last row is approved).
+  const toastElement = toast && (
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex items-center gap-2 rounded-full bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white shadow-lg"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {toast}
+      </div>
+    </div>
+  );
+
   if (error) {
     return (
       <div className="space-y-3">
+        {toastElement}
         {monthSelect}
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       </div>
@@ -142,6 +181,7 @@ export default function ReviewList() {
   if (rows === null) {
     return (
       <div className="space-y-3">
+        {toastElement}
         {monthSelect}
         <p className="text-sm text-zinc-500">กำลังโหลด...</p>
       </div>
@@ -153,6 +193,7 @@ export default function ReviewList() {
   if (pending.length === 0) {
     return (
       <div className="space-y-3">
+        {toastElement}
         {monthSelect}
         <p className="text-sm text-zinc-500">ไม่มีรายการรอตรวจ</p>
       </div>
@@ -164,6 +205,7 @@ export default function ReviewList() {
 
   return (
     <div className="space-y-4">
+      {toastElement}
       {monthSelect}
 
       {/* Bulk-approve bar — stacks (checkbox row, then a full-width button)
