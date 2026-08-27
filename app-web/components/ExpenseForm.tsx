@@ -57,6 +57,34 @@ interface FormState {
   grandTotal: string;
 }
 
+/**
+ * Where an in-progress bill is parked in the browser.
+ *
+ * Receipts get captured out in the field on a phone, so a dropped
+ * connection, a backgrounded tab reclaimed by iOS, or a stray back-swipe
+ * used to throw away everything typed. The draft is saved on every edit and
+ * cleared only once the row is actually saved, so a failed submit keeps the
+ * data instead of losing it.
+ *
+ * The attached photo is deliberately NOT part of the draft: File objects
+ * can't be serialised, and stashing image bytes here would blow the ~5MB
+ * localStorage budget. Re-attaching one photo is a far smaller loss than
+ * re-typing the whole form.
+ */
+const DRAFT_KEY = "tdfb-expense-draft-v1";
+
+/** True when the user has actually typed something worth offering back. */
+function isDraftWorthKeeping(draft: FormState): boolean {
+  return Boolean(
+    draft.supplierNameTh.trim() ||
+      draft.supplierNameEn.trim() ||
+      draft.expenseDetail.trim() ||
+      draft.documentNumber.trim() ||
+      draft.grandTotal.trim() ||
+      draft.amountBeforeVat.trim()
+  );
+}
+
 const INITIAL_STATE: FormState = {
   fundType: "เงินสดย่อย",
   documentType: "ใบเสร็จรับเงิน",
@@ -84,6 +112,9 @@ export default function ExpenseForm({
   initialFile?: File | null;
 }) {
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
+  // A draft recovered from a previous session, offered rather than applied —
+  // see the DRAFT_KEY block below.
+  const [recoverableDraft, setRecoverableDraft] = useState<FormState | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -311,6 +342,13 @@ export default function ExpenseForm({
       }
 
       setMessage({ type: "success", text: "บันทึกรายการเรียบร้อย สถานะ: รอตรวจ" });
+      // Only now is the draft safe to drop — a failed submit above keeps it.
+      try {
+        window.localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        // ignore
+      }
+      setRecoverableDraft(null);
       setForm(INITIAL_STATE);
       setReceiptFile(null);
       setOcrMessage(null);
@@ -368,6 +406,38 @@ export default function ExpenseForm({
     setDuplicateMatch(null);
   }
 
+  // Offer back anything left over from a previous visit. Read once on mount;
+  // never applied silently, since overwriting a form the user has already
+  // started typing into would be worse than losing the draft.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(DRAFT_KEY);
+      if (!stored) return;
+      const draft = JSON.parse(stored) as FormState;
+      if (!isDraftWorthKeeping(draft)) return;
+      // localStorage doesn't exist during SSR, so reading it on mount is
+      // exactly the "sync from an external system" case effects are for.
+      // Runs once and only sets the offer banner — no cascading renders.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRecoverableDraft(draft);
+    } catch {
+      // corrupt or unavailable storage (private mode) — nothing to recover
+    }
+  }, []);
+
+  // Persist on every edit. Cheap: a handful of short strings.
+  useEffect(() => {
+    try {
+      if (isDraftWorthKeeping(form)) {
+        window.localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+      } else {
+        window.localStorage.removeItem(DRAFT_KEY);
+      }
+    } catch {
+      // storage full or blocked — saving a draft is best-effort only
+    }
+  }, [form]);
+
   const inputClass =
     "mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600";
   const labelClass = "block text-sm font-medium text-zinc-700";
@@ -375,6 +445,46 @@ export default function ExpenseForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
       <p className="text-xs text-zinc-400">ผู้บันทึก: {recordedByName}</p>
+
+      {/* Unsent work from a previous visit. Restoring is the user's call —
+          applying it automatically could clobber a form already in progress. */}
+      {recoverableDraft && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <p className="text-sm font-medium text-amber-900">มีข้อมูลที่กรอกค้างไว้</p>
+          <p className="mt-0.5 text-xs text-amber-800">
+            {recoverableDraft.supplierNameTh || recoverableDraft.expenseDetail || "รายการที่ยังไม่ได้บันทึก"}
+            {recoverableDraft.grandTotal ? ` · ${formatMoneyDisplay(recoverableDraft.grandTotal)} บาท` : ""}
+            {" — กู้คืนมาแก้ต่อได้ (รูปบิลต้องแนบใหม่)"}
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setForm(recoverableDraft);
+                setRecoverableDraft(null);
+                setFundTypeTouched(true); // a restored fund type is a real choice, don't re-classify over it
+              }}
+              className="flex-1 rounded-md bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800 sm:flex-none"
+            >
+              กู้คืนข้อมูล
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRecoverableDraft(null);
+                try {
+                  window.localStorage.removeItem(DRAFT_KEY);
+                } catch {
+                  // ignore
+                }
+              }}
+              className="flex-1 rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 sm:flex-none"
+            >
+              ทิ้งไป
+            </button>
+          </div>
+        </div>
+      )}
 
       <div>
         <label className={labelClass}>ประเภทเงิน</label>
