@@ -47,6 +47,14 @@ const MUTED = "#555555";
 const RULE = "#222222";
 const DASH_BORDER = "#999999";
 
+// Font sizes, all two points smaller than the first cut — printed/downloaded
+// full-size read as too large.
+const TITLE_SIZE = 16;
+const HEADER_NAME_SIZE = 13;
+const HEADER_SMALL_SIZE = 8;
+const BODY_SIZE = 9;
+const SECTION_HEAD_SIZE = 11;
+
 const LOGO_PATH = path.join(process.cwd(), "assets", "tdfb-logo.jpg");
 let logoBuffer: Buffer | null = null;
 try {
@@ -64,7 +72,7 @@ interface Run {
 }
 
 function r(text: string, opts: Partial<Omit<Run, "text">> = {}): Run {
-  return { text, font: FONT_REGULAR, size: 11, color: INK, ...opts };
+  return { text, font: FONT_REGULAR, size: BODY_SIZE, color: INK, ...opts };
 }
 
 /**
@@ -83,11 +91,11 @@ function drawRuns(
   align: "left" | "center" | "right" = "left"
 ): number {
   const widths = runs.map((run) => {
-    doc.font(run.font ?? FONT_REGULAR).fontSize(run.size ?? 11);
+    doc.font(run.font ?? FONT_REGULAR).fontSize(run.size ?? BODY_SIZE);
     return doc.widthOfString(run.text);
   });
   const totalWidth = widths.reduce((a, b) => a + b, 0);
-  const maxSize = Math.max(...runs.map((run) => run.size ?? 11), 11);
+  const maxSize = Math.max(...runs.map((run) => run.size ?? BODY_SIZE), BODY_SIZE);
 
   let cursorX = x;
   if (align === "center") cursorX = x + (width - totalWidth) / 2;
@@ -96,11 +104,11 @@ function drawRuns(
   runs.forEach((run, i) => {
     doc
       .font(run.font ?? FONT_REGULAR)
-      .fontSize(run.size ?? 11)
+      .fontSize(run.size ?? BODY_SIZE)
       .fillColor(run.color ?? INK)
       .text(run.text, cursorX, y, { lineBreak: false });
     if (run.underline) {
-      const lineY = y + (run.size ?? 11) + 2;
+      const lineY = y + (run.size ?? BODY_SIZE) + 2;
       doc
         .save()
         .strokeColor(run.color ?? INK)
@@ -142,7 +150,7 @@ function drawUnderlinedBlock(
   x: number,
   y: number,
   width: number,
-  size = 11
+  size = BODY_SIZE
 ): number {
   doc.font(FONT_REGULAR).fontSize(size).fillColor(INK);
   const startY = doc.y;
@@ -194,32 +202,60 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
     doc.image(logoBuffer, MARGIN, headerTop, { width: LOGO_SIZE, height: LOGO_SIZE });
   } else {
     drawDashedBox(doc, MARGIN, headerTop, LOGO_SIZE, LOGO_SIZE);
-    drawRuns(doc, [r("TDFB", { font: FONT_BOLD, size: 10, color: MUTED })], MARGIN, headerTop + LOGO_SIZE / 2 - 5, LOGO_SIZE, "center");
+    drawRuns(
+      doc,
+      [r("TDFB", { font: FONT_BOLD, size: HEADER_SMALL_SIZE, color: MUTED })],
+      MARGIN,
+      headerTop + LOGO_SIZE / 2 - 5,
+      LOGO_SIZE,
+      "center"
+    );
   }
 
   const infoX = MARGIN + LOGO_SIZE + HEADER_GAP;
   const infoWidth = CONTENT_WIDTH - LOGO_SIZE - HEADER_GAP;
   let infoY = headerTop;
-  infoY += drawRuns(doc, [r("บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด", { font: FONT_BOLD, size: 15 })], infoX, infoY, infoWidth, "right") - 3;
+  infoY +=
+    drawRuns(
+      doc,
+      [r("บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด", { font: FONT_BOLD, size: HEADER_NAME_SIZE })],
+      infoX,
+      infoY,
+      infoWidth,
+      "right"
+    ) - 1;
+  // Address wraps across two lines, with the phone number tacked onto the
+  // end of the second — three header lines total either way, just a
+  // narrower/taller block instead of one very long address line. No gap
+  // trimmed between these two (unlike above): Thai vowel/tone marks stack
+  // both above and below the base consonant, so an 8pt line needs its full
+  // height or the next line's marks start touching this one's.
   infoY += drawRuns(
     doc,
-    [r("300 ถนนประชาอุทิศ แขวงทุ่งครุ เขตทุ่งครุ กรุงเทพมหานคร 10140", { size: 10, color: MUTED })],
+    [r("300 ถนนประชาอุทิศ แขวงทุ่งครุ เขตทุ่งครุ", { size: HEADER_SMALL_SIZE, color: MUTED })],
     infoX,
     infoY,
     infoWidth,
     "right"
-  ) - 3;
-  drawRuns(doc, [r("โทร 096-009-3570", { size: 10, color: MUTED })], infoX, infoY, infoWidth, "right");
+  );
+  drawRuns(
+    doc,
+    [r("กรุงเทพมหานคร 10140 โทร 02-114-3715", { size: HEADER_SMALL_SIZE, color: MUTED })],
+    infoX,
+    infoY,
+    infoWidth,
+    "right"
+  );
 
-  doc.y = headerTop + Math.max(LOGO_SIZE, 15 + 10 + 10 + 20) + 14;
+  doc.y = headerTop + Math.max(LOGO_SIZE, HEADER_NAME_SIZE + HEADER_SMALL_SIZE * 2 + 16) + 14;
 
   // ---- Rule line ----
   doc.save().strokeColor(RULE).lineWidth(1.2).moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).stroke().restore();
   doc.y += 22;
 
   // ---- Title ----
-  drawRuns(doc, [r("เอกสารการรับเงิน", { font: FONT_BOLD, size: 18 })], MARGIN, doc.y, CONTENT_WIDTH, "center");
-  doc.y += 18 * 1.35 + 18;
+  drawRuns(doc, [r("เอกสารการรับเงิน", { font: FONT_BOLD, size: TITLE_SIZE })], MARGIN, doc.y, CONTENT_WIDTH, "center");
+  doc.y += TITLE_SIZE * 1.35 + 18;
 
   // ---- Date ----
   drawRuns(
@@ -230,7 +266,7 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
     CONTENT_WIDTH,
     "right"
   );
-  doc.y += 11 * 1.35 + 20;
+  doc.y += BODY_SIZE * 1.35 + 20;
 
   // ---- Body ----
   doc.y += drawRuns(
@@ -255,7 +291,7 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
     CONTENT_WIDTH,
     "left"
   );
-  doc.y += 11 * 1.35 + 4;
+  doc.y += BODY_SIZE * 1.35 + 4;
   doc.y += drawUnderlinedBlock(doc, data.expenseDetail, MARGIN + 16, doc.y, CONTENT_WIDTH - 16) + 12;
 
   doc.y += drawRuns(
@@ -272,20 +308,20 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
   ) + 22;
 
   // ---- Attachments ----
-  drawRuns(doc, [r("เอกสารแนบ", { font: FONT_BOLD, size: 13 })], MARGIN, doc.y, CONTENT_WIDTH, "left");
-  doc.y += 13 * 1.35 + 10;
+  drawRuns(doc, [r("เอกสารแนบ", { font: FONT_BOLD, size: SECTION_HEAD_SIZE })], MARGIN, doc.y, CONTENT_WIDTH, "left");
+  doc.y += SECTION_HEAD_SIZE * 1.35 + 10;
   for (const line of [
     "1. ใบเบิกทดรองจ่าย / ใบรับรองแทนใบเสร็จรับเงิน",
     "2. เอกสารการรับเงิน",
     "3. ใบเสร็จ / ใบกำกับภาษี",
   ]) {
     drawRuns(doc, [r(line)], MARGIN, doc.y, CONTENT_WIDTH, "left");
-    doc.y += 11 * 1.35 + 6;
+    doc.y += BODY_SIZE * 1.35 + 6;
   }
   doc.y += 18;
 
   // ---- Footer: ID photo (left) + signature (right) ----
-  const FOOTER_HEIGHT = 170;
+  const FOOTER_HEIGHT = 185;
   if (doc.y + FOOTER_HEIGHT > PAGE_HEIGHT - MARGIN) {
     doc.addPage();
   }
@@ -295,7 +331,8 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
   const signX = MARGIN + PHOTO_COL_WIDTH;
 
   let photoY = footerTop;
-  photoY += drawRuns(doc, [r("รูปภาพสำเนาบัตรประชาชน", { size: 10 })], MARGIN, photoY, PHOTO_COL_WIDTH, "center") + 8;
+  photoY +=
+    drawRuns(doc, [r("รูปภาพสำเนาบัตรประชาชน", { size: HEADER_SMALL_SIZE })], MARGIN, photoY, PHOTO_COL_WIDTH, "center") + 8;
   const PHOTO_BOX_WIDTH = PHOTO_COL_WIDTH - 20;
   const PHOTO_BOX_HEIGHT = 110;
   const photoBoxX = MARGIN + (PHOTO_COL_WIDTH - PHOTO_BOX_WIDTH) / 2;
@@ -312,17 +349,38 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
   let signY = footerTop;
   signY +=
     (() => {
-      doc.font(FONT_REGULAR).fontSize(11).fillColor(INK);
+      doc.font(FONT_REGULAR).fontSize(BODY_SIZE).fillColor(INK);
       const startY = signY;
       doc.text("รับรองถูกต้องและได้รับเงินครบถ้วนตามจำนวนดังกล่าว", signX, signY, {
         width: SIGN_COL_WIDTH,
         align: "center",
       });
       return doc.y - startY;
-    })() + 30;
+    })() +
+    30 +
+    // One extra blank line's worth of space right above "ลงชื่อ", so there's
+    // real room to sign by hand once this is printed, not just a cramped line.
+    BODY_SIZE * 1.35;
 
-  drawRuns(doc, [r("ลงชื่อ "), r(" ".repeat(28), { underline: true })], signX, signY, SIGN_COL_WIDTH, "center");
-  signY += 11 * 1.35 + 8;
+  // "ลงชื่อ" sits at the left edge of its column (not centered) — printing
+  // this out, the actual signature gets written into the space the line
+  // stretches across to the right, which a centered short line wouldn't
+  // leave enough room for.
+  const SIGN_LABEL = "ลงชื่อ ";
+  doc.font(FONT_REGULAR).fontSize(BODY_SIZE).fillColor(INK);
+  const signLabelWidth = doc.widthOfString(SIGN_LABEL);
+  doc.text(SIGN_LABEL, signX, signY, { lineBreak: false });
+  const signLineY = signY + BODY_SIZE + 2;
+  doc
+    .save()
+    .strokeColor(INK)
+    .lineWidth(0.7)
+    .moveTo(signX + signLabelWidth, signLineY)
+    .lineTo(signX + SIGN_COL_WIDTH - 10, signLineY)
+    .stroke()
+    .restore();
+
+  signY += BODY_SIZE * 1.35 + 8;
   drawRuns(doc, [r(`(${data.payeeName})`, { font: FONT_BOLD })], signX, signY, SIGN_COL_WIDTH, "center");
 
   doc.end();
