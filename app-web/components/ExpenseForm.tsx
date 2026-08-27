@@ -435,7 +435,7 @@ export default function ExpenseForm({
               const pairedAccName = getAccNameForCategory(value);
               if (pairedAccName) set("accName", pairedAccName);
             }}
-            placeholder="เช่น ค่าเดินทาง"
+            placeholder="พิมพ์เพื่อค้นหา เช่น เดินทาง, อาหาร"
             required
           />
           <datalist id="odoo-category-options">
@@ -452,7 +452,7 @@ export default function ExpenseForm({
             list="acc-name-options"
             value={form.accName}
             onChange={(e) => set("accName", e.target.value)}
-            placeholder="เช่น ค่าใช้จ่ายเบ็ดเตล็ด"
+            placeholder="พิมพ์เพื่อค้นหา เช่น สวัสดิการ, ไฟฟ้า"
           />
           <datalist id="acc-name-options">
             {ACC_NAME_OPTIONS.map((option) => (
