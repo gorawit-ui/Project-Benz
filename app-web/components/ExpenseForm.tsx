@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { DocumentType, ExpenseRow, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { findDuplicateExpense } from "@/lib/duplicateCheck";
+import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS, getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
 
 const DOCUMENT_TYPES: DocumentType[] = ["ใบเสร็จรับเงิน", "ใบกำกับภาษี", "บิลเงินสด"];
 
@@ -42,11 +43,14 @@ interface FormState {
   supplierNameTh: string;
   supplierNameEn: string;
   expenseDetail: string;
-  // หมวดหมู่ (ตาม Odoo) — free text for now: the real Odoo chart-of-accounts
-  // category list is not available yet (blocked on docs/04-open-items.md
-  // item A: "หมวดหมู่ + Cost Center + Acc name จริงจาก Odoo — บล็อกที่สุด").
-  // Once that list exists this should become a dropdown sourced from it.
+  // หมวดหมู่ (ตาม Odoo) + Acc name always pair together (see
+  // lib/categoryMapping.ts) — both render as a text input with a dropdown
+  // of known pairs (still freely editable, since the real Odoo
+  // chart-of-accounts list isn't loaded into that table yet; see
+  // docs/04-open-items.md item A). Picking/auto-matching a category fills
+  // in its paired acc name automatically.
   odooCategory: string;
+  accName: string;
   amountBeforeVat: string;
   vatAmount: string;
   grandTotal: string;
@@ -62,6 +66,7 @@ const INITIAL_STATE: FormState = {
   supplierNameEn: "",
   expenseDetail: "",
   odooCategory: "",
+  accName: "",
   amountBeforeVat: "",
   vatAmount: "",
   grandTotal: "",
@@ -176,6 +181,19 @@ export default function ExpenseForm({
     if (data.expenseDetail) patch.expenseDetail = data.expenseDetail;
     if (data.billDate) patch.billDate = data.billDate;
     if (data.documentNumber) patch.documentNumber = data.documentNumber;
+
+    // หมวดหมู่ + Acc name auto-match off the vendor name / expense detail
+    // OCR just read (see lib/categoryMapping.ts) — a receipt with no
+    // confident keyword match is left blank for the user to pick manually
+    // rather than guessing.
+    const vendorForMatch = data.supplierNameTh || data.supplierNameEn || "";
+    if (vendorForMatch || data.expenseDetail) {
+      const match = matchCategoryAndAccName(vendorForMatch, data.expenseDetail || "");
+      if (match) {
+        patch.odooCategory = match.category;
+        patch.accName = match.accName;
+      }
+    }
 
     const hasBeforeVat = data.amountBeforeVat !== undefined;
     const hasVat = data.vatAmount !== undefined;
@@ -386,7 +404,7 @@ export default function ExpenseForm({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
           <label className={labelClass}>ประเภทเอกสาร</label>
           <select
@@ -406,11 +424,41 @@ export default function ExpenseForm({
           <label className={labelClass}>หมวดหมู่ (ตาม Odoo)</label>
           <input
             className={inputClass}
+            list="odoo-category-options"
             value={form.odooCategory}
-            onChange={(e) => set("odooCategory", e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              set("odooCategory", value);
+              // Category and acc name always pair together — picking a
+              // known category (from the dropdown, or auto-matched) fills
+              // in its acc name too; accName still stays freely editable.
+              const pairedAccName = getAccNameForCategory(value);
+              if (pairedAccName) set("accName", pairedAccName);
+            }}
             placeholder="เช่น ค่าเดินทาง"
             required
           />
+          <datalist id="odoo-category-options">
+            {CATEGORY_OPTIONS.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+        </div>
+
+        <div>
+          <label className={labelClass}>ชื่อบัญชี (Acc name)</label>
+          <input
+            className={inputClass}
+            list="acc-name-options"
+            value={form.accName}
+            onChange={(e) => set("accName", e.target.value)}
+            placeholder="เช่น ค่าใช้จ่ายเบ็ดเตล็ด"
+          />
+          <datalist id="acc-name-options">
+            {ACC_NAME_OPTIONS.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
         </div>
       </div>
 
