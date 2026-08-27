@@ -13,7 +13,7 @@ import { isMonthTabName } from "./month";
 
 export type FundType = "เงินสดย่อย" | "เงินทดรองจ่าย";
 export type DocumentType = "ใบเสร็จรับเงิน" | "ใบกำกับภาษี" | "บิลเงินสด";
-export type ExpenseStatus = "รอตรวจ" | "ตรวจแล้ว" | "นับเข้าระบบ" | "ต้องแก้ไข";
+export type ExpenseStatus = "รอตรวจ" | "ตรวจแล้ว" | "นับเข้าระบบ" | "ต้องแก้ไข" | "ยกเลิก";
 // Only meaningful for fundType === "เงินทดรองจ่าย" (the employee paid out of
 // pocket and is owed a reimbursement) — ignored for "เงินสดย่อย" rows.
 export type RepaymentStatus = "จ่ายคืนแล้ว" | "ยังไม่จ่ายคืน";

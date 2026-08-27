@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { ExpenseRow, ExpenseStatus } from "@/lib/sheets";
 
 // Monthly petty-cash threshold, mirrored from the classification logic used
@@ -14,6 +14,7 @@ const STATUS_BADGE: Record<ExpenseStatus, string> = {
   ตรวจแล้ว: "bg-blue-50 text-blue-700",
   นับเข้าระบบ: "bg-emerald-50 text-emerald-700",
   ต้องแก้ไข: "bg-red-50 text-red-700",
+  ยกเลิก: "bg-zinc-100 text-zinc-500",
 };
 
 function formatBaht(n: number): string {
@@ -38,6 +39,14 @@ export default function DashboardView() {
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [repaymentBusyId, setRepaymentBusyId] = useState<string | null>(null);
   const [repaymentError, setRepaymentError] = useState<string | null>(null);
+  // Default view excludes ยกเลิก (day-to-day list); switching this to
+  // "ยกเลิก" is the "log" of cancelled entries the product owner asked for —
+  // a dedicated place to look them up rather than mixed into the normal list.
+  const [statusFilter, setStatusFilter] = useState<"" | "ยกเลิก">("");
+  const [cancelDraftId, setCancelDraftId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelBusyId, setCancelBusyId] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   async function loadRows(month: string) {
     setError(null);
@@ -113,13 +122,71 @@ export default function DashboardView() {
     }
   }
 
+  function openCancelDraft(rowId: string) {
+    setCancelError(null);
+    setCancelReason("");
+    setCancelDraftId(rowId);
+  }
+
+  function closeCancelDraft() {
+    setCancelDraftId(null);
+    setCancelReason("");
+  }
+
+  /**
+   * Cancels a row (sets status ยกเลิก + the reason in the same "หมายเหตุ"
+   * column every other status change uses) rather than deleting it — it
+   * stays in the sheet as a permanent record ("Log"), just excluded from
+   * every total (petty-cash used, category breakdown, advance/repayment)
+   * from here on. A corrected re-entry is a fresh submission through the
+   * normal capture flow, which naturally gets its own next sequential id —
+   * this row's old id is never reused.
+   */
+  async function confirmCancel(row: ExpenseRow) {
+    const reason = cancelReason.trim();
+    if (!reason) {
+      setCancelError("กรุณาระบุเหตุผลที่ยกเลิก");
+      return;
+    }
+    setCancelError(null);
+    setCancelBusyId(row.id);
+    const previousStatus = row.status;
+    // Optimistic update so totals react immediately.
+    setRows((prev) =>
+      (prev ?? []).map((r) => (r.id === row.id ? { ...r, status: "ยกเลิก", note: reason } : r))
+    );
+    try {
+      const res = await fetch(`/api/expenses/${encodeURIComponent(row.id)}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ยกเลิก", note: reason, monthTab: selectedMonth }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "ยกเลิกรายการไม่สำเร็จ");
+      }
+      closeCancelDraft();
+    } catch (err) {
+      // Revert on failure.
+      setRows((prev) =>
+        (prev ?? []).map((r) => (r.id === row.id ? { ...r, status: previousStatus, note: row.note } : r))
+      );
+      setCancelError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+    } finally {
+      setCancelBusyId(null);
+    }
+  }
+
+  // Cancelled rows never count toward any total below — cancelling returns
+  // the amount to the petty-cash wallet and drops it out of the category
+  // breakdown and the advance/repayment tracking, per the product owner.
   const pettyCashTotal = useMemo(
-    () => sumGrandTotal((rows ?? []).filter((r) => r.fundType === "เงินสดย่อย")),
+    () => sumGrandTotal((rows ?? []).filter((r) => r.fundType === "เงินสดย่อย" && r.status !== "ยกเลิก")),
     [rows]
   );
 
   const advanceRows = useMemo(
-    () => (rows ?? []).filter((r) => r.fundType === "เงินทดรองจ่าย"),
+    () => (rows ?? []).filter((r) => r.fundType === "เงินทดรองจ่าย" && r.status !== "ยกเลิก"),
     [rows]
   );
   const unpaidAdvanceRows = useMemo(
@@ -140,6 +207,7 @@ export default function DashboardView() {
   const categoryTotals = useMemo(() => {
     const totals = new Map<string, number>();
     for (const r of rows ?? []) {
+      if (r.status === "ยกเลิก") continue;
       const key = r.odooCategory || "(ไม่ระบุหมวดหมู่)";
       totals.set(key, (totals.get(key) ?? 0) + r.grandTotal);
     }
@@ -158,6 +226,10 @@ export default function DashboardView() {
   const filteredRows = useMemo(() => {
     const search = vendorSearch.trim().toLowerCase();
     return (rows ?? [])
+      // Default view ("") is the everyday list and hides ยกเลิก entries;
+      // picking "ยกเลิก" from the status filter is the dedicated "log" view
+      // for looking them back up.
+      .filter((r) => (statusFilter ? r.status === statusFilter : r.status !== "ยกเลิก"))
       .filter((r) => (categoryFilter ? r.odooCategory === categoryFilter : true))
       .filter((r) =>
         search
@@ -165,7 +237,7 @@ export default function DashboardView() {
           : true
       )
       .sort((a, b) => b.billDate.localeCompare(a.billDate));
-  }, [rows, categoryFilter, vendorSearch]);
+  }, [rows, statusFilter, categoryFilter, vendorSearch]);
 
   const monthSelect = months.length > 0 && (
     <select
@@ -297,9 +369,10 @@ export default function DashboardView() {
 
       {/* Category breakdown */}
       <div>
-        <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-400">
-          แยกตามหมวดหมู่ (ตาม Odoo) · {selectedMonth || "เดือนนี้"}
-        </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-400">แยกตามหมวดหมู่ (ตาม Odoo)</h2>
+          {monthSelect}
+        </div>
         {categoryTotals.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">ไม่มีรายการในเดือนนี้</p>
         ) : (
@@ -322,6 +395,14 @@ export default function DashboardView() {
 
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as "" | "ยกเลิก")}
+          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+        >
+          <option value="">รายการทั้งหมด</option>
+          <option value="ยกเลิก">รายการที่ยกเลิก (Log)</option>
+        </select>
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
@@ -356,54 +437,111 @@ export default function DashboardView() {
               <th className="px-4 py-3">ประเภทเงิน</th>
               <th className="px-4 py-3">สถานะ</th>
               <th className="px-4 py-3">จ่ายคืน</th>
+              <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-zinc-400">
+                <td colSpan={9} className="px-4 py-6 text-center text-zinc-400">
                   ไม่พบรายการ
                 </td>
               </tr>
             ) : (
-              filteredRows.map((row) => (
-                <tr key={row.id} className="border-t border-zinc-100">
-                  <td className="px-4 py-3 text-zinc-600">{row.billDate}</td>
-                  <td className="px-4 py-3 text-zinc-600">{row.recordedBy}</td>
-                  <td className="px-4 py-3 font-medium text-zinc-800">
-                    {row.supplierNameTh}
-                    {row.supplierNameEn ? ` (${row.supplierNameEn})` : ""}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600">{row.odooCategory}</td>
-                  <td className="px-4 py-3 font-semibold text-zinc-800">{formatBaht(row.grandTotal)}</td>
-                  <td className="px-4 py-3 text-zinc-500">{row.fundType}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <span
-                      className={`inline-block whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${STATUS_BADGE[row.status]}`}
-                    >
-                      {row.status}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {row.fundType === "เงินทดรองจ่าย" ? (
-                      <button
-                        type="button"
-                        disabled={repaymentBusyId === row.id}
-                        onClick={() => handleToggleRepayment(row)}
-                        className={`inline-block whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium disabled:opacity-50 ${
-                          row.repaymentStatus === "จ่ายคืนแล้ว"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-zinc-100 text-zinc-500"
-                        }`}
-                      >
-                        {row.repaymentStatus === "จ่ายคืนแล้ว" ? "จ่ายคืนแล้ว" : "ยังไม่จ่ายคืน"}
-                      </button>
-                    ) : (
-                      <span className="text-zinc-300">-</span>
+              filteredRows.map((row) => {
+                const cancelled = row.status === "ยกเลิก";
+                return (
+                  <Fragment key={row.id}>
+                    <tr className={`border-t border-zinc-100 ${cancelled ? "bg-zinc-50" : ""}`}>
+                      <td className={`px-4 py-3 ${cancelled ? "text-zinc-400" : "text-zinc-600"}`}>{row.billDate}</td>
+                      <td className={`px-4 py-3 ${cancelled ? "text-zinc-400" : "text-zinc-600"}`}>{row.recordedBy}</td>
+                      <td className={`px-4 py-3 font-medium ${cancelled ? "text-zinc-400" : "text-zinc-800"}`}>
+                        {row.supplierNameTh}
+                        {row.supplierNameEn ? ` (${row.supplierNameEn})` : ""}
+                        {cancelled && row.note && (
+                          <p className="mt-0.5 text-xs font-normal text-zinc-400">เหตุผลที่ยกเลิก: {row.note}</p>
+                        )}
+                      </td>
+                      <td className={`px-4 py-3 ${cancelled ? "text-zinc-400" : "text-zinc-600"}`}>{row.odooCategory}</td>
+                      <td className={`px-4 py-3 font-semibold ${cancelled ? "text-zinc-400" : "text-zinc-800"}`}>
+                        {formatBaht(row.grandTotal)}
+                      </td>
+                      <td className={`px-4 py-3 ${cancelled ? "text-zinc-400" : "text-zinc-500"}`}>{row.fundType}</td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <span
+                          className={`inline-block whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${STATUS_BADGE[row.status]}`}
+                        >
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        {row.fundType === "เงินทดรองจ่าย" && !cancelled ? (
+                          <button
+                            type="button"
+                            disabled={repaymentBusyId === row.id}
+                            onClick={() => handleToggleRepayment(row)}
+                            className={`inline-block whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium disabled:opacity-50 ${
+                              row.repaymentStatus === "จ่ายคืนแล้ว"
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-zinc-100 text-zinc-500"
+                            }`}
+                          >
+                            {row.repaymentStatus === "จ่ายคืนแล้ว" ? "จ่ายคืนแล้ว" : "ยังไม่จ่ายคืน"}
+                          </button>
+                        ) : (
+                          <span className="text-zinc-300">-</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        {!cancelled && (
+                          <button
+                            type="button"
+                            onClick={() => openCancelDraft(row.id)}
+                            className="text-xs font-medium text-red-600 underline-offset-2 hover:underline"
+                          >
+                            ยกเลิก
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {cancelDraftId === row.id && (
+                      <tr className="border-t border-red-100 bg-red-50">
+                        <td colSpan={9} className="px-4 py-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <input
+                              type="text"
+                              autoFocus
+                              placeholder="เหตุผลที่ยกเลิกรายการนี้ (จำเป็น)"
+                              value={cancelReason}
+                              onChange={(e) => setCancelReason(e.target.value)}
+                              className="w-full flex-1 rounded-md border border-red-300 bg-white px-3 py-2 text-sm sm:w-auto"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                disabled={cancelBusyId === row.id}
+                                onClick={() => void confirmCancel(row)}
+                                className="flex-1 rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
+                              >
+                                {cancelBusyId === row.id ? "กำลังยกเลิก..." : "ยืนยันยกเลิกรายการ"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={cancelBusyId === row.id}
+                                onClick={closeCancelDraft}
+                                className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 sm:flex-none"
+                              >
+                                ปิด
+                              </button>
+                            </div>
+                          </div>
+                          {cancelError && <p className="mt-2 text-xs text-red-700">{cancelError}</p>}
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                </tr>
-              ))
+                  </Fragment>
+                );
+              })
             )}
           </tbody>
         </table>

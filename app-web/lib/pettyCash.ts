@@ -37,7 +37,12 @@ export function sumPettyCashForMonth(rows: ExpenseRow[], referenceDate: string):
   if (!targetYearMonth) return 0;
 
   return rows
-    .filter((row) => row.fundType === "เงินสดย่อย" && yearMonthOf(row.billDate) === targetYearMonth)
+    .filter(
+      (row) =>
+        row.fundType === "เงินสดย่อย" &&
+        row.status !== "ยกเลิก" && // cancelling returns the amount to this month's available balance
+        yearMonthOf(row.billDate) === targetYearMonth
+    )
     .reduce((sum, row) => sum + row.grandTotal, 0);
 }
 

@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { getTeamByKey } from "@/lib/teams";
 import { updateExpenseRowStatus, type ExpenseStatus } from "@/lib/sheets";
 
-const VALID_STATUSES: ExpenseStatus[] = ["รอตรวจ", "ตรวจแล้ว", "นับเข้าระบบ", "ต้องแก้ไข"];
+const VALID_STATUSES: ExpenseStatus[] = ["รอตรวจ", "ตรวจแล้ว", "นับเข้าระบบ", "ต้องแก้ไข", "ยกเลิก"];
 
 /** POST /api/expenses/[id]/status — reviewer sets ตรวจแล้ว / ต้องแก้ไข / etc. */
 export async function POST(
@@ -36,6 +36,13 @@ export async function POST(
 
   if (!body.monthTab || typeof body.monthTab !== "string") {
     return NextResponse.json({ error: "missing monthTab" }, { status: 400 });
+  }
+
+  // Cancelling must always carry a reason (stored in the same "หมายเหตุ"
+  // column every other status change already uses) — an unexplained
+  // cancellation is exactly what this feature exists to prevent.
+  if (status === "ยกเลิก" && !body.note?.trim()) {
+    return NextResponse.json({ error: "กรุณาระบุเหตุผลที่ยกเลิกรายการ" }, { status: 400 });
   }
 
   try {
