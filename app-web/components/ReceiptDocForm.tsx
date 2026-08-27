@@ -13,7 +13,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [downloadFilename, setDownloadFilename] = useState<string>("เอกสารรับเงิน.docx");
+  const [downloadFilename, setDownloadFilename] = useState<string>("เอกสารรับเงิน.pdf");
   const [driveLink, setDriveLink] = useState<string | null>(null);
   const [linkedExpenseId, setLinkedExpenseId] = useState<string | null>(null);
   const [driveWarning, setDriveWarning] = useState<string | null>(null);
@@ -86,7 +86,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
     const parts = [payeeName, expenseDetail, `${Math.round(amountNumber)}บาท`, compactDocDate]
       .map((part) => sanitizeForFilename(part))
       .filter(Boolean);
-    return parts.length > 0 ? `${parts.join("_")}.docx` : "เอกสารรับเงิน.docx";
+    return parts.length > 0 ? `${parts.join("_")}.pdf` : "เอกสารรับเงิน.pdf";
   }
 
   const inputClass =
@@ -122,7 +122,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
 
       // The Drive upload + sheet-link step is additive on the server side and
       // never fails the response — its outcome (if any) rides along as
-      // headers next to the .docx bytes so the direct-download path below is
+      // headers next to the PDF bytes so the direct-download path below is
       // completely unaffected.
       const uploadedLink = res.headers.get("X-Drive-Web-View-Link");
       const linkedId = res.headers.get("X-Linked-Expense-Id");
@@ -283,7 +283,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         disabled={submitting}
         className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-medium text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {submitting ? "กำลังสร้างเอกสาร..." : "สร้างเอกสารรับเงิน (.docx)"}
+        {submitting ? "กำลังสร้างเอกสาร..." : "สร้างเอกสารรับเงิน (.pdf)"}
       </button>
 
       {downloadUrl && (
@@ -293,7 +293,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
           onClick={() => showToast("ดาวน์โหลดเอกสารรับเงินแล้ว")}
           className="block w-full rounded-lg border border-emerald-700 px-4 py-3 text-center font-medium text-emerald-700 hover:bg-emerald-50"
         >
-          ดาวน์โหลดเอกสารรับเงิน (.docx)
+          ดาวน์โหลดเอกสารรับเงิน (.pdf)
         </a>
       )}
 

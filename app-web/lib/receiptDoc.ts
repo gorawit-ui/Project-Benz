@@ -1,115 +1,52 @@
 /**
  * Server-side generator for the "เอกสารรับเงิน" (cash-receipt attestation)
- * .docx, used when an employee's bill has no proper receipt (e.g. a
+ * PDF, used when an employee's bill has no proper receipt (e.g. a
  * 7-Eleven purchase with no tax invoice) — see docs/02-requirements-from-pop.md
- * ("กรณีบิลไม่สมบูรณ์"). This is a direct TypeScript port of the table/paragraph
- * structure in templates/receipt-doc/build.js, parameterized with real data
- * instead of the original template/{{tag}} + hardcoded sample "filled" modes.
+ * ("กรณีบิลไม่สมบูรณ์").
+ *
+ * This used to generate a .docx via the `docx` package. Switched to a
+ * hand-drawn PDF (pdfkit) instead, after repeated rounds of .docx table
+ * layouts rendering correctly everywhere they were actually tested (Word,
+ * WPS, a direct download, even a fully-converted native Google Doc) yet
+ * still garbling in Google Drive's mobile quick-preview app — the surface
+ * ~90% of real usage happens on. A .docx's layout is re-computed by
+ * whichever app opens it, so it only ever renders as well as that app's own
+ * (sometimes buggy) layout/shaping engine. A PDF has its glyphs positioned
+ * once, at generation time, and carries that positioning with it — nothing
+ * left for a weaker viewer to get wrong. Verified locally by rasterizing a
+ * generated PDF and inspecting it directly: Thai combining marks (สระ/
+ * วรรณยุกต์, above AND below the base consonant) position correctly at
+ * both regular and bold weight.
+ *
+ * The embedded font is Google Fonts' "Sarabun" (SIL Open Font License,
+ * assets/fonts/Sarabun-{Regular,Bold}.ttf) rather than "TH Sarabun New" —
+ * a .docx could just reference a font by name and rely on the viewer
+ * having it installed, but a PDF must embed the actual font file to
+ * guarantee identical rendering everywhere, and TH Sarabun New isn't
+ * freely redistributable in the same way. Sarabun is Google's own take on
+ * the same loopless-Thai-business-document genre and is visually close.
  */
-import {
-  AlignmentType,
-  Bookmark,
-  BorderStyle,
-  Document,
-  ImageRun,
-  LeaderType,
-  Packer,
-  Paragraph,
-  Table,
-  TableCell,
-  TableLayoutType,
-  TableRow,
-  TabStopPosition,
-  TabStopType,
-  TextRun,
-  VerticalAlign,
-  WidthType,
-  type IParagraphOptions,
-  type IRunOptions,
-  type ParagraphChild,
-} from "docx";
+import PDFDocument from "pdfkit";
 import fs from "node:fs";
 import path from "node:path";
 import { numberToThaiBahtText } from "./thaiBahtText";
 
-const FONT = "TH Sarabun New";
+const FONT_REGULAR = "Sarabun";
+const FONT_BOLD = "Sarabun-Bold";
+const FONT_DIR = path.join(process.cwd(), "assets", "fonts");
 
-// Page is A4 portrait (11906 twips wide) with 1440-twip left/right margins
-// (see the Document's `page` properties below) — 9026 twips of usable
-// content width. Every table/cell below is sized in DXA (absolute twips)
-// derived from this, never WidthType.PERCENTAGE: the docx package renders a
-// percentage width as a literal `w:w="100%"`-style string, which Word and
-// WPS tolerate but Google Docs' .docx importer does not.
-//
-// That alone isn't enough, though — EVERY `new Table(...)` below must also
-// pass `columnWidths: [...]` matching its cells' real DXA widths. Without
-// it, the docx package writes a placeholder `<w:tblGrid><w:gridCol
-// w:w="100"/>...` (100 twips, i.e. next to nothing) regardless of what each
-// cell's own `w:tcW` says. Word/WPS render fine anyway (they trust the
-// per-cell width over the grid), which is why this went unnoticed through
-// several rounds of testing — but Google Docs' renderer treats `tblGrid` as
-// authoritative, squeezing any cell with real text into that ~0-width
-// column and wrapping it one character per line. Confirmed by unzipping a
-// real generated .docx and comparing `<w:tblGrid>` against the per-cell
-// widths actually intended.
-const PAGE_MARGIN = 1440;
-const PAGE_WIDTH = 11906;
-const CONTENT_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2;
+// A4 in points (72pt/inch), ~2cm margins — plenty of room for this
+// document's content, and comfortably printable.
+const PAGE_WIDTH = 595.28;
+const PAGE_HEIGHT = 841.89;
+const MARGIN = 56;
+const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
-function widthDxa(twips: number) {
-  return { size: Math.max(1, Math.round(twips)), type: WidthType.DXA };
-}
+const INK = "#111111";
+const MUTED = "#555555";
+const RULE = "#222222";
+const DASH_BORDER = "#999999";
 
-/**
- * Splits `targetWidth - text.length` dot characters evenly around `text`,
- * so a short value (e.g. a short name) reads as "centered in a dotted
- * field" while a value at or past targetWidth just gets the minimum on
- * each side — never negative, never a jarring wall of dots for a long
- * value. Used to give filled-in values (name, amount) breathing room from
- * the surrounding label text instead of sitting flush against it.
- */
-function dotPadding(text: string, targetWidth: number, minPerSide = 2): { left: string; right: string } {
-  const totalPad = Math.max(minPerSide * 2, targetWidth - text.length);
-  const left = Math.floor(totalPad / 2);
-  const right = totalPad - left;
-  return { left: ".".repeat(left), right: ".".repeat(right) };
-}
-
-const DOT_PADDING_COLOR = "999999";
-
-// A right tab stop at the page's right margin with a dot leader — appending
-// a "\t" run after a short line's real content stretches it out to the
-// margin with dots filling the gap, so a one-line paragraph still visually
-// spans the full row width instead of stopping wherever its text happens to
-// end (standard AlignmentType justify/thaiDistribute only affects wrapped
-// lines, never a paragraph's one and only line).
-const RIGHT_DOT_LEADER_TAB = [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX, leader: LeaderType.DOT }];
-
-/**
- * Two-stop tab layout for a value that should visually CENTER within the
- * gap after a label, dots on both sides: a "\t" before the value jumps to
- * a CENTER tab stop at `centerPosition` — Word centers the value's text on
- * that point and fills everything before it with the dot leader — and a
- * second "\t" right after the value jumps to a RIGHT tab stop at the page's
- * right margin, dot-leading the gap after it out to whatever follows (the
- * next label, or nothing, in which case it just reaches the margin).
- */
-function centeredFieldTabStops(centerPosition: number) {
-  return [
-    { type: TabStopType.CENTER, position: Math.round(centerPosition), leader: LeaderType.DOT },
-    { type: TabStopType.RIGHT, position: TabStopPosition.MAX, leader: LeaderType.DOT },
-  ];
-}
-
-// Where each centered value's tab stop sits, as a fraction of CONTENT_WIDTH
-// — chosen by eye against the fixed label text each field follows (a
-// longer label needs the center point pushed further right).
-const NAME_CENTER_POSITION = CONTENT_WIDTH * 0.38;
-const EXPENSE_DETAIL_CENTER_POSITION = CONTENT_WIDTH * 0.75;
-
-// Real TDFB logo (square JPEG) — falls back to a "[TDFB LOGO]" placeholder
-// paragraph if the asset is ever missing, so a bad deploy never crashes doc
-// generation outright.
 const LOGO_PATH = path.join(process.cwd(), "assets", "tdfb-logo.jpg");
 let logoBuffer: Buffer | null = null;
 try {
@@ -118,260 +55,101 @@ try {
   logoBuffer = null;
 }
 
-function run(text: string, opts: Partial<Omit<IRunOptions, "text">> = {}) {
-  return new TextRun({ text, font: FONT, size: 30, ...opts });
+interface Run {
+  text: string;
+  font?: string;
+  size?: number;
+  color?: string;
+  underline?: boolean;
 }
 
-function para(
-  children: ParagraphChild[],
-  opts: Partial<Omit<IParagraphOptions, "children">> = {}
-) {
-  return new Paragraph({ children, spacing: { after: 200, line: 320 }, ...opts });
+function r(text: string, opts: Partial<Omit<Run, "text">> = {}): Run {
+  return { text, font: FONT_REGULAR, size: 11, color: INK, ...opts };
 }
 
-function noBorder() {
-  const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
-  // insideHorizontal/insideVertical (the grid lines *between* cells) default
-  // to a visible border in the docx package when a Table's `borders` object
-  // doesn't set them explicitly — top/bottom/left/right alone only turns off
-  // the outer edge, leaving a stray line between cells in a multi-cell row.
-  return { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none };
-}
-
-function ruleLine() {
-  const line = { style: BorderStyle.SINGLE, size: 8, color: "222222" };
-  const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
-  return new Table({
-    width: widthDxa(CONTENT_WIDTH),
-    columnWidths: [CONTENT_WIDTH],
-    layout: TableLayoutType.FIXED,
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({
-            width: widthDxa(CONTENT_WIDTH),
-            borders: { top: none, left: none, bottom: line, right: none },
-            children: [new Paragraph({ text: "", spacing: { after: 0 } })],
-          }),
-        ],
-      }),
-    ],
+/**
+ * Draws a single line built from mixed-style runs (like a .docx paragraph
+ * of TextRuns), left/center/right aligned within [x, x + width] at y.
+ * Handles per-run underlines manually (pdfkit's `underline` option only
+ * cooperates with its own text-flow calls, not with hand-positioned runs).
+ * Returns the line's height so callers can advance their own y cursor.
+ */
+function drawRuns(
+  doc: PDFKit.PDFDocument,
+  runs: Run[],
+  x: number,
+  y: number,
+  width: number,
+  align: "left" | "center" | "right" = "left"
+): number {
+  const widths = runs.map((run) => {
+    doc.font(run.font ?? FONT_REGULAR).fontSize(run.size ?? 11);
+    return doc.widthOfString(run.text);
   });
-}
+  const totalWidth = widths.reduce((a, b) => a + b, 0);
+  const maxSize = Math.max(...runs.map((run) => run.size ?? 11), 11);
 
-function dashedBorder() {
-  const b = { style: BorderStyle.DASHED, size: 4, color: "AAAAAA" };
-  return { top: b, left: b, bottom: b, right: b };
-}
+  let cursorX = x;
+  if (align === "center") cursorX = x + (width - totalWidth) / 2;
+  if (align === "right") cursorX = x + width - totalWidth;
 
-/** widthTwips is this box's own outer width (i.e. its parent cell/column's width), not a percentage — see the CONTENT_WIDTH comment above for why. */
-function dashedBox(cellChildren: Paragraph[], widthTwips: number = CONTENT_WIDTH) {
-  return new Table({
-    width: widthDxa(widthTwips),
-    columnWidths: [widthTwips],
-    layout: TableLayoutType.FIXED,
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({
-            width: widthDxa(widthTwips),
-            borders: dashedBorder(),
-            verticalAlign: VerticalAlign.CENTER,
-            margins: { top: 120, bottom: 120, left: 120, right: 120 },
-            children: cellChildren,
-          }),
-        ],
-      }),
-    ],
+  runs.forEach((run, i) => {
+    doc
+      .font(run.font ?? FONT_REGULAR)
+      .fontSize(run.size ?? 11)
+      .fillColor(run.color ?? INK)
+      .text(run.text, cursorX, y, { lineBreak: false });
+    if (run.underline) {
+      const lineY = y + (run.size ?? 11) + 2;
+      doc
+        .save()
+        .strokeColor(run.color ?? INK)
+        .lineWidth(0.7)
+        .moveTo(cursorX, lineY)
+        .lineTo(cursorX + widths[i], lineY)
+        .stroke()
+        .restore();
+    }
+    cursorX += widths[i];
   });
+
+  doc.fillColor(INK);
+  return maxSize * 1.35;
 }
 
-const HEADER_LOGO_WIDTH = Math.round(CONTENT_WIDTH * 0.22);
-const HEADER_TEXT_WIDTH = CONTENT_WIDTH - HEADER_LOGO_WIDTH;
-
-function buildHeaderTable() {
-  return new Table({
-    width: widthDxa(CONTENT_WIDTH),
-    columnWidths: [HEADER_LOGO_WIDTH, HEADER_TEXT_WIDTH],
-    layout: TableLayoutType.FIXED,
-    borders: noBorder(),
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({
-            width: widthDxa(HEADER_LOGO_WIDTH),
-            borders: noBorder(),
-            verticalAlign: VerticalAlign.CENTER,
-            children: logoBuffer
-              ? [
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    spacing: { after: 0 },
-                    children: [
-                      new ImageRun({
-                        type: "jpg",
-                        data: logoBuffer,
-                        transformation: { width: 90, height: 90 },
-                      }),
-                    ],
-                  }),
-                ]
-              : [
-                  dashedBox(
-                    [
-                      para([run("[TDFB LOGO]", { size: 20, color: "999999", italics: true })], {
-                        alignment: AlignmentType.CENTER,
-                        spacing: { after: 0 },
-                      }),
-                    ],
-                    HEADER_LOGO_WIDTH
-                  ),
-                  // A table cell whose content ends in a nested <w:tbl> with
-                  // no trailing paragraph is legal to Word/WPS but rejected
-                  // outright by Google Docs' .docx importer — every nested
-                  // dashedBox() below needs an empty paragraph after it.
-                  new Paragraph({ text: "", spacing: { after: 0 } }),
-                ],
-          }),
-          new TableCell({
-            width: widthDxa(HEADER_TEXT_WIDTH),
-            borders: noBorder(),
-            verticalAlign: VerticalAlign.CENTER,
-            children: [
-              para([run("บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด", { bold: true, size: 32 })], {
-                alignment: AlignmentType.RIGHT,
-                spacing: { after: 40, line: 260 },
-              }),
-              para(
-                [run("300 ถนนประชาอุทิศ แขวงทุ่งครุ เขตทุ่งครุ กรุงเทพมหานคร 10140", { size: 24, color: "444444" })],
-                { alignment: AlignmentType.RIGHT, spacing: { after: 20, line: 240 } }
-              ),
-              para([run("โทร 096-009-3570", { size: 24, color: "444444" })], {
-                alignment: AlignmentType.RIGHT,
-                spacing: { after: 0, line: 240 },
-              }),
-            ],
-          }),
-        ],
-      }),
-    ],
-  });
+/** Draws a dashed-border rectangle (the ID-photo placeholder box). */
+function drawDashedBox(doc: PDFKit.PDFDocument, x: number, y: number, width: number, height: number) {
+  doc
+    .save()
+    .strokeColor(DASH_BORDER)
+    .lineWidth(1)
+    .dash(3, { space: 2 })
+    .rect(x, y, width, height)
+    .stroke()
+    .undash()
+    .restore();
 }
 
-const DATE_SPACER_WIDTH = Math.round(CONTENT_WIDTH * 0.6);
-const DATE_BOX_WIDTH = CONTENT_WIDTH - DATE_SPACER_WIDTH;
-
-function buildDateTable(dateText: string) {
-  return new Table({
-    width: widthDxa(CONTENT_WIDTH),
-    columnWidths: [DATE_SPACER_WIDTH, DATE_BOX_WIDTH],
-    layout: TableLayoutType.FIXED,
-    borders: noBorder(),
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({ width: widthDxa(DATE_SPACER_WIDTH), borders: noBorder(), children: [new Paragraph("")] }),
-          new TableCell({
-            width: widthDxa(DATE_BOX_WIDTH),
-            borders: noBorder(),
-            margins: { top: 100, bottom: 100, left: 120, right: 120 },
-            children: [
-              para([run("วันที่ "), run(dateText, { bold: true, underline: {} })], {
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 0 },
-              }),
-            ],
-          }),
-        ],
-      }),
-    ],
-  });
-}
-
-function buildIdPhotoCellContent(idCardImage?: { buffer: Buffer; type: "png" | "jpg" }) {
-  if (idCardImage) {
-    const img = new ImageRun({
-      type: idCardImage.type,
-      data: idCardImage.buffer,
-      transformation: { width: 220, height: 140 },
-    });
-    return new Bookmark({ id: "id_card_photo", children: [img] });
-  }
-  // No photo supplied — leave the bookmark in place (empty) so the
-  // document still opens and the position can be filled in by hand later.
-  return new Bookmark({ id: "id_card_photo", children: [] });
-}
-
-const FOOTER_CELL_MARGIN = 160;
-const FOOTER_PHOTO_WIDTH = Math.round(CONTENT_WIDTH * 0.45);
-const FOOTER_SIGNATURE_WIDTH = CONTENT_WIDTH - FOOTER_PHOTO_WIDTH;
-const FOOTER_PHOTO_BOX_WIDTH = FOOTER_PHOTO_WIDTH - FOOTER_CELL_MARGIN * 2;
-
-function buildFooterTable(payeeName: string, idCardImage?: { buffer: Buffer; type: "png" | "jpg" }) {
-  const photoNode = buildIdPhotoCellContent(idCardImage);
-  return new Table({
-    width: widthDxa(CONTENT_WIDTH),
-    columnWidths: [FOOTER_PHOTO_WIDTH, FOOTER_SIGNATURE_WIDTH],
-    layout: TableLayoutType.FIXED,
-    borders: noBorder(),
-    rows: [
-      new TableRow({
-        children: [
-          new TableCell({
-            width: widthDxa(FOOTER_PHOTO_WIDTH),
-            verticalAlign: VerticalAlign.CENTER,
-            margins: {
-              top: FOOTER_CELL_MARGIN,
-              bottom: FOOTER_CELL_MARGIN,
-              left: FOOTER_CELL_MARGIN,
-              right: FOOTER_CELL_MARGIN,
-            },
-            children: [
-              para([run("รูปภาพสำเนาบัตรประชาชน", { size: 22 })], {
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 120 },
-              }),
-              dashedBox(
-                [
-                  new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    spacing: { after: 0 },
-                    children: [photoNode],
-                  }),
-                ],
-                FOOTER_PHOTO_BOX_WIDTH
-              ),
-              new Paragraph({ text: "", spacing: { after: 0 } }),
-            ],
-          }),
-          new TableCell({
-            width: widthDxa(FOOTER_SIGNATURE_WIDTH),
-            verticalAlign: VerticalAlign.CENTER,
-            margins: {
-              top: FOOTER_CELL_MARGIN,
-              bottom: FOOTER_CELL_MARGIN,
-              left: FOOTER_CELL_MARGIN,
-              right: FOOTER_CELL_MARGIN,
-            },
-            children: [
-              para([run("รับรองถูกต้องและได้รับเงินครบถ้วนตามจำนวนดังกล่าว")], {
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 320 },
-              }),
-              para([run("ลงชื่อ "), run(" ".repeat(30), { underline: {} })], {
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 30 },
-              }),
-              para([run(`(${payeeName})`, { bold: true })], {
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 0 },
-              }),
-            ],
-          }),
-        ],
-      }),
-    ],
-  });
+/**
+ * Draws `text` wrapped within `width`, every line underlined — used for the
+ * filled-in "รายละเอียด" block, which can be several OCR-extracted line
+ * items (already \n-separated) or a single long line needing to wrap.
+ * Returns the total height consumed.
+ */
+function drawUnderlinedBlock(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  size = 11
+): number {
+  doc.font(FONT_REGULAR).fontSize(size).fillColor(INK);
+  const startY = doc.y;
+  doc.text(text, x, y, { width, underline: true, lineGap: 3 });
+  const consumed = doc.y - y;
+  doc.y = startY; // caller manages its own cursor
+  return consumed || size * 1.35;
 }
 
 export interface GenerateReceiptDocInput {
@@ -385,93 +163,168 @@ export interface GenerateReceiptDocInput {
   amountNumber: number;
   /** วันที่ในเอกสาร, e.g. "26 สิงหาคม 2569" (already formatted Thai text) */
   docDate: string;
-  /** รูปสำเนาบัตรประชาชน — omit to leave the bookmark position empty */
+  /** รูปสำเนาบัตรประชาชน — omit to leave a placeholder box. pdfkit detects
+   * JPEG vs PNG from the buffer's own signature, so no MIME type is needed. */
   idCardImageBuffer?: Buffer;
-  /** MIME type of idCardImageBuffer, defaults to image/png */
-  idCardImageMimeType?: string;
 }
 
-function mimeToDocxImageType(mimeType?: string): "png" | "jpg" {
-  return mimeType === "image/jpeg" || mimeType === "image/jpg" ? "jpg" : "png";
-}
-
-/** Builds the filled-in "เอกสารรับเงิน" .docx and returns it as a Buffer. */
+/** Builds the filled-in "เอกสารรับเงิน" PDF and returns it as a Buffer. */
 export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise<Buffer> {
   const amountText = numberToThaiBahtText(data.amountNumber);
   const amountNumberText = data.amountNumber.toFixed(2);
-  const amountPad = dotPadding(amountNumberText, 14);
-  const idCardImage = data.idCardImageBuffer
-    ? { buffer: data.idCardImageBuffer, type: mimeToDocxImageType(data.idCardImageMimeType) }
-    : undefined;
 
-  const children = [
-    buildHeaderTable(),
-    new Paragraph({ text: "", spacing: { after: 80 } }),
-    ruleLine(),
-    new Paragraph({ text: "", spacing: { after: 200 } }),
-    para([run("เอกสารการรับเงิน", { bold: true, size: 40 })], {
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 260 },
-    }),
-    buildDateTable(data.docDate),
-    new Paragraph({ text: "", spacing: { after: 200 } }),
+  const doc = new PDFDocument({
+    size: [PAGE_WIDTH, PAGE_HEIGHT],
+    margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+  });
+  doc.registerFont(FONT_REGULAR, path.join(FONT_DIR, "Sarabun-Regular.ttf"));
+  doc.registerFont(FONT_BOLD, path.join(FONT_DIR, "Sarabun-Bold.ttf"));
 
-    para(
-      [
-        run("ข้าพเจ้า "),
-        run("\t"),
-        run(data.payeeName, { underline: {} }),
-        run("\t     เลขประจำตัวประชาชน "),
-        run(data.idNumber, { underline: {} }),
-      ],
-      { alignment: AlignmentType.THAI_DISTRIBUTE, tabStops: centeredFieldTabStops(NAME_CENTER_POSITION) }
-    ),
-
-    para(
-      [
-        run("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า "),
-        run("\t"),
-        run(data.expenseDetail, { underline: {} }),
-        run("\t"),
-      ],
-      { alignment: AlignmentType.THAI_DISTRIBUTE, tabStops: centeredFieldTabStops(EXPENSE_DETAIL_CENTER_POSITION) }
-    ),
-
-    para(
-      [
-        run("เป็นจำนวนเงิน "),
-        run(amountPad.left, { color: DOT_PADDING_COLOR }),
-        run(amountNumberText, { underline: {} }),
-        run(amountPad.right, { color: DOT_PADDING_COLOR }),
-        run(" บาท ("),
-        run(amountText, { underline: {} }),
-        run(")"),
-        run("\t"),
-      ],
-      { alignment: AlignmentType.THAI_DISTRIBUTE, tabStops: RIGHT_DOT_LEADER_TAB, spacing: { after: 280 } }
-    ),
-
-    para([run("เอกสารแนบ", { bold: true, size: 32 })], { spacing: { after: 140 } }),
-    para([run("1. ใบเบิกทดรองจ่าย / ใบรับรองแทนใบเสร็จรับเงิน")], { spacing: { after: 60 } }),
-    para([run("2. เอกสารการรับเงิน")], { spacing: { after: 60 } }),
-    para([run("3. ใบเสร็จ / ใบกำกับภาษี")], { spacing: { after: 320 } }),
-
-    buildFooterTable(data.payeeName, idCardImage),
-  ];
-
-  const doc = new Document({
-    sections: [
-      {
-        properties: {
-          page: {
-            size: { width: 11906, height: 16838 },
-            margin: { top: 1300, bottom: 1300, left: 1440, right: 1440 },
-          },
-        },
-        children,
-      },
-    ],
+  const chunks: Buffer[] = [];
+  doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+  const done = new Promise<Buffer>((resolve) => {
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
   });
 
-  return Packer.toBuffer(doc);
+  // ---- Header: logo + right-aligned company info ----
+  const LOGO_SIZE = 54;
+  const HEADER_GAP = 14;
+  const headerTop = doc.y;
+  if (logoBuffer) {
+    doc.image(logoBuffer, MARGIN, headerTop, { width: LOGO_SIZE, height: LOGO_SIZE });
+  } else {
+    drawDashedBox(doc, MARGIN, headerTop, LOGO_SIZE, LOGO_SIZE);
+    drawRuns(doc, [r("TDFB", { font: FONT_BOLD, size: 10, color: MUTED })], MARGIN, headerTop + LOGO_SIZE / 2 - 5, LOGO_SIZE, "center");
+  }
+
+  const infoX = MARGIN + LOGO_SIZE + HEADER_GAP;
+  const infoWidth = CONTENT_WIDTH - LOGO_SIZE - HEADER_GAP;
+  let infoY = headerTop;
+  infoY += drawRuns(doc, [r("บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด", { font: FONT_BOLD, size: 15 })], infoX, infoY, infoWidth, "right") - 3;
+  infoY += drawRuns(
+    doc,
+    [r("300 ถนนประชาอุทิศ แขวงทุ่งครุ เขตทุ่งครุ กรุงเทพมหานคร 10140", { size: 10, color: MUTED })],
+    infoX,
+    infoY,
+    infoWidth,
+    "right"
+  ) - 3;
+  drawRuns(doc, [r("โทร 096-009-3570", { size: 10, color: MUTED })], infoX, infoY, infoWidth, "right");
+
+  doc.y = headerTop + Math.max(LOGO_SIZE, 15 + 10 + 10 + 20) + 14;
+
+  // ---- Rule line ----
+  doc.save().strokeColor(RULE).lineWidth(1.2).moveTo(MARGIN, doc.y).lineTo(MARGIN + CONTENT_WIDTH, doc.y).stroke().restore();
+  doc.y += 22;
+
+  // ---- Title ----
+  drawRuns(doc, [r("เอกสารการรับเงิน", { font: FONT_BOLD, size: 18 })], MARGIN, doc.y, CONTENT_WIDTH, "center");
+  doc.y += 18 * 1.35 + 18;
+
+  // ---- Date ----
+  drawRuns(
+    doc,
+    [r("วันที่ "), r(data.docDate, { font: FONT_BOLD, underline: true })],
+    MARGIN,
+    doc.y,
+    CONTENT_WIDTH,
+    "right"
+  );
+  doc.y += 11 * 1.35 + 20;
+
+  // ---- Body ----
+  doc.y += drawRuns(
+    doc,
+    [
+      r("ข้าพเจ้า "),
+      r(data.payeeName, { underline: true }),
+      r("     เลขประจำตัวประชาชน "),
+      r(data.idNumber, { underline: true }),
+    ],
+    MARGIN,
+    doc.y,
+    CONTENT_WIDTH,
+    "left"
+  ) + 12;
+
+  drawRuns(
+    doc,
+    [r("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า")],
+    MARGIN,
+    doc.y,
+    CONTENT_WIDTH,
+    "left"
+  );
+  doc.y += 11 * 1.35 + 4;
+  doc.y += drawUnderlinedBlock(doc, data.expenseDetail, MARGIN + 16, doc.y, CONTENT_WIDTH - 16) + 12;
+
+  doc.y += drawRuns(
+    doc,
+    [
+      r("เป็นจำนวนเงิน "),
+      r(amountNumberText, { font: FONT_BOLD, underline: true }),
+      r(` บาท (${amountText})`, { underline: true }),
+    ],
+    MARGIN,
+    doc.y,
+    CONTENT_WIDTH,
+    "left"
+  ) + 22;
+
+  // ---- Attachments ----
+  drawRuns(doc, [r("เอกสารแนบ", { font: FONT_BOLD, size: 13 })], MARGIN, doc.y, CONTENT_WIDTH, "left");
+  doc.y += 13 * 1.35 + 10;
+  for (const line of [
+    "1. ใบเบิกทดรองจ่าย / ใบรับรองแทนใบเสร็จรับเงิน",
+    "2. เอกสารการรับเงิน",
+    "3. ใบเสร็จ / ใบกำกับภาษี",
+  ]) {
+    drawRuns(doc, [r(line)], MARGIN, doc.y, CONTENT_WIDTH, "left");
+    doc.y += 11 * 1.35 + 6;
+  }
+  doc.y += 18;
+
+  // ---- Footer: ID photo (left) + signature (right) ----
+  const FOOTER_HEIGHT = 170;
+  if (doc.y + FOOTER_HEIGHT > PAGE_HEIGHT - MARGIN) {
+    doc.addPage();
+  }
+  const footerTop = doc.y;
+  const PHOTO_COL_WIDTH = CONTENT_WIDTH * 0.42;
+  const SIGN_COL_WIDTH = CONTENT_WIDTH - PHOTO_COL_WIDTH;
+  const signX = MARGIN + PHOTO_COL_WIDTH;
+
+  let photoY = footerTop;
+  photoY += drawRuns(doc, [r("รูปภาพสำเนาบัตรประชาชน", { size: 10 })], MARGIN, photoY, PHOTO_COL_WIDTH, "center") + 8;
+  const PHOTO_BOX_WIDTH = PHOTO_COL_WIDTH - 20;
+  const PHOTO_BOX_HEIGHT = 110;
+  const photoBoxX = MARGIN + (PHOTO_COL_WIDTH - PHOTO_BOX_WIDTH) / 2;
+  if (data.idCardImageBuffer) {
+    doc.image(data.idCardImageBuffer, photoBoxX, photoY, {
+      fit: [PHOTO_BOX_WIDTH, PHOTO_BOX_HEIGHT],
+      align: "center",
+      valign: "center",
+    });
+  } else {
+    drawDashedBox(doc, photoBoxX, photoY, PHOTO_BOX_WIDTH, PHOTO_BOX_HEIGHT);
+  }
+
+  let signY = footerTop;
+  signY +=
+    (() => {
+      doc.font(FONT_REGULAR).fontSize(11).fillColor(INK);
+      const startY = signY;
+      doc.text("รับรองถูกต้องและได้รับเงินครบถ้วนตามจำนวนดังกล่าว", signX, signY, {
+        width: SIGN_COL_WIDTH,
+        align: "center",
+      });
+      return doc.y - startY;
+    })() + 30;
+
+  drawRuns(doc, [r("ลงชื่อ "), r(" ".repeat(28), { underline: true })], signX, signY, SIGN_COL_WIDTH, "center");
+  signY += 11 * 1.35 + 8;
+  drawRuns(doc, [r(`(${data.payeeName})`, { font: FONT_BOLD })], signX, signY, SIGN_COL_WIDTH, "center");
+
+  doc.end();
+  return done;
 }

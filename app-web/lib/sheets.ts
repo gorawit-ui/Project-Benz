@@ -466,7 +466,7 @@ export async function updateExpenseRowStatus(
 /**
  * Writes a Drive link into a row's "ลิงก์เอกสารรับเงิน" column, matched by
  * "รหัสรายการ" (same find-by-id pattern as updateExpenseRowStatus). Used
- * when a generated เอกสารรับเงิน .docx is linked back to the expense row it
+ * when a generated เอกสารรับเงิน PDF is linked back to the expense row it
  * was created for. `tabName` identifies which month tab the row lives in.
  */
 export async function updateExpenseRowReceiptDocLink(

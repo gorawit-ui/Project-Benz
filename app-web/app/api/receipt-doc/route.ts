@@ -18,10 +18,9 @@ function sanitizeForFilename(value: string): string {
 /**
  * POST /api/receipt-doc — accepts multipart form data (payee info + an
  * optional ID card image, plus an optional `expenseRowId` to link back to)
- * and returns the filled "เอกสารรับเงิน" .docx as a file download — the same
- * behavior as before, unchanged.
+ * and returns the filled "เอกสารรับเงิน" PDF as a file download.
  *
- * Additive on top of that: the generated .docx is also uploaded to Drive
+ * Additive on top of that: the generated PDF is also uploaded to Drive
  * (see RECEIPT_DOC_DRIVE_FOLDER) and, if both an expenseRowId AND a
  * monthTab (the row's month tab name, since sheet writes now need to know
  * which month tab to target and this route cannot guess it) were given, its
@@ -53,11 +52,9 @@ export async function POST(req: NextRequest) {
   }
 
   let idCardImageBuffer: Buffer | undefined;
-  let idCardImageMimeType: string | undefined;
   const idCardImage = formData.get("idCardImage");
   if (idCardImage instanceof File && idCardImage.size > 0) {
     idCardImageBuffer = Buffer.from(await idCardImage.arrayBuffer());
-    idCardImageMimeType = idCardImage.type;
   }
 
   try {
@@ -68,12 +65,12 @@ export async function POST(req: NextRequest) {
       amountNumber,
       docDate,
       idCardImageBuffer,
-      idCardImageMimeType,
     });
 
+    const docDateCompact = formatYyyymmdd(now);
     const headers: Record<string, string> = {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="receipt-doc-${Date.now()}.docx"`,
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="receipt-doc-${docDateCompact}.pdf"`,
       // docDate defaults server-side (today's date) when the form doesn't
       // send one — the client needs the resolved value to name the
       // downloaded file consistently with what's printed in the document.
@@ -81,11 +78,11 @@ export async function POST(req: NextRequest) {
       "X-Doc-Date": encodeURIComponent(docDate),
       // Machine-readable companion for the filename (YYYYMMDD) — avoids the
       // client having to parse the Thai-formatted X-Doc-Date text back apart.
-      "X-Doc-Date-Compact": formatYyyymmdd(now),
+      "X-Doc-Date-Compact": docDateCompact,
     };
 
     // Uploading to Drive (and linking to a sheet row) is additive — if any
-    // part of it fails, the .docx download above must still succeed exactly
+    // part of it fails, the PDF download above must still succeed exactly
     // as it did before this feature existed.
     try {
       const team = getTeamByKey(session.team?.key);
@@ -97,9 +94,9 @@ export async function POST(req: NextRequest) {
           RECEIPT_DOC_DRIVE_FOLDER,
           {
             buffer,
-            mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            mimeType: "application/pdf",
           },
-          `receipt-doc-${sanitizeForFilename(payeeName)}-${Date.now()}.docx`
+          `receipt-doc-${sanitizeForFilename(payeeName)}-${docDateCompact}.pdf`
         );
         headers["X-Drive-Web-View-Link"] = uploaded.webViewLink;
 
