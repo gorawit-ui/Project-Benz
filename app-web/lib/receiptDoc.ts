@@ -47,6 +47,14 @@ const MUTED = "#555555";
 const RULE = "#222222";
 const DASH_BORDER = "#999999";
 
+// Manual underlines are drawn at `y + size * UNDERLINE_DROP` (y being the
+// TOP of the text box, not the baseline). Thai vowels/consonants can dip
+// below the baseline (e.g. ญ, ฎ, ฏ, สระอุ/อู), so this needs real clearance
+// below the glyphs — a flat "+2" was tight enough at BODY_SIZE to go
+// unnoticed but visibly clipped descenders once fields were sized up to
+// FIELD_SIZE.
+const UNDERLINE_DROP = 1.28;
+
 // Font sizes, all two points smaller than the first cut — printed/downloaded
 // full-size read as too large.
 const TITLE_SIZE = 16;
@@ -113,7 +121,7 @@ function drawRuns(
       .fillColor(run.color ?? INK)
       .text(run.text, cursorX, y, { lineBreak: false });
     if (run.underline) {
-      const lineY = y + (run.size ?? BODY_SIZE) + 2;
+      const lineY = y + (run.size ?? BODY_SIZE) * UNDERLINE_DROP;
       doc
         .save()
         .strokeColor(run.color ?? INK)
@@ -144,41 +152,6 @@ function drawDashedBox(doc: PDFKit.PDFDocument, x: number, y: number, width: num
 }
 
 /**
- * Draws `text` wrapped within `width`; every wrapped line gets a underline
- * spanning the FULL width, not just as long as that line's text — like a
- * blank line on a paper form, so a short value still reaches the right edge
- * of its slot instead of trailing off into empty space. Used for the
- * filled-in "รายละเอียด" block, which can be several OCR-extracted line
- * items (already \n-separated) or a single long line needing to wrap.
- * Returns the total height consumed.
- */
-function drawFilledBlock(
-  doc: PDFKit.PDFDocument,
-  text: string,
-  x: number,
-  y: number,
-  width: number,
-  size = BODY_SIZE
-): number {
-  doc.font(FONT_REGULAR).fontSize(size).fillColor(INK);
-  const lineHeight = size * 1.35;
-  const startY = doc.y;
-  doc.text(text, x, y, { width, lineGap: 3 });
-  const consumed = doc.y - y || lineHeight;
-  doc.y = startY; // caller manages its own cursor
-
-  const lineCount = Math.max(1, Math.round(consumed / lineHeight));
-  doc.save().strokeColor(INK).lineWidth(0.7);
-  for (let i = 0; i < lineCount; i++) {
-    const lineY = y + i * lineHeight + size + 2;
-    doc.moveTo(x, lineY).lineTo(x + width, lineY).stroke();
-  }
-  doc.restore();
-
-  return consumed;
-}
-
-/**
  * Draws "label value" where the value sits in an underlined slot of a FIXED
  * width (not just as wide as the value text) — a short value still fills
  * its slot instead of leaving the rest of the row blank. Returns the total
@@ -198,7 +171,7 @@ function drawFilledField(
   const labelWidth = doc.widthOfString(label);
   const valueX = x + labelWidth;
   doc.text(value, valueX, y, { lineBreak: false });
-  const lineY = y + size + 2;
+  const lineY = y + size * UNDERLINE_DROP;
   doc
     .save()
     .strokeColor(INK)
@@ -239,7 +212,7 @@ function drawAmountLine(
   doc.font(FONT_REGULAR).fontSize(size);
   doc.text(` บาท (${amountText})`, valueX + numberWidth, y, { lineBreak: false });
 
-  const lineY = y + size + 2;
+  const lineY = y + size * UNDERLINE_DROP;
   doc
     .save()
     .strokeColor(INK)
@@ -362,37 +335,50 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
   doc.y += BODY_SIZE * 1.35 + 20;
 
   // ---- Body ----
-  // Name and ID number each get their own full-width filled slot (not just
-  // as wide as the typed value), so a short value still reaches the right
-  // margin. Each is on its own line rather than sharing one row — payee
-  // names vary a lot in length, and a long one would otherwise run into the
-  // ID number field next to it.
+  // Name and ID number share one row when they comfortably fit — the name
+  // gets just enough slot width for its own value, ID number gets the rest
+  // out to the right margin. A long payee name falls back to its own
+  // full-width row instead, so it can never run into the ID field next to
+  // it (names vary a lot in length; a fixed split isn't safe).
   {
     doc.font(FONT_REGULAR).fontSize(FIELD_SIZE);
     const nameLabel = "ข้าพเจ้า ";
+    const idLabelInline = "   เลขประจำตัวประชาชน ";
     const nameLabelWidth = doc.widthOfString(nameLabel);
-    const rowY1 = doc.y;
-    drawFilledField(doc, nameLabel, data.payeeName, MARGIN, rowY1, CONTENT_WIDTH - nameLabelWidth, FIELD_SIZE);
-    doc.y = rowY1 + FIELD_SIZE * 1.35 + 10;
+    const nameValueWidth = doc.widthOfString(data.payeeName);
+    const idLabelInlineWidth = doc.widthOfString(idLabelInline);
+    const idValueWidth = doc.widthOfString(data.idNumber);
+    const oneLineWidth = nameLabelWidth + nameValueWidth + idLabelInlineWidth + idValueWidth;
 
-    doc.font(FONT_REGULAR).fontSize(FIELD_SIZE);
-    const idLabel = "เลขประจำตัวประชาชน ";
-    const idLabelWidth = doc.widthOfString(idLabel);
-    const rowY2 = doc.y;
-    drawFilledField(doc, idLabel, data.idNumber, MARGIN, rowY2, CONTENT_WIDTH - idLabelWidth, FIELD_SIZE);
-    doc.y = rowY2 + FIELD_SIZE * 1.35 + 14;
+    const rowY1 = doc.y;
+    if (oneLineWidth <= CONTENT_WIDTH - 20) {
+      const nameSlotWidth = nameValueWidth + 24;
+      const afterName = drawFilledField(doc, nameLabel, data.payeeName, MARGIN, rowY1, nameSlotWidth, FIELD_SIZE);
+      const idSlotWidth = CONTENT_WIDTH - afterName - idLabelInlineWidth;
+      drawFilledField(doc, idLabelInline, data.idNumber, MARGIN + afterName, rowY1, idSlotWidth, FIELD_SIZE);
+      doc.y = rowY1 + FIELD_SIZE * 1.35 + 14;
+    } else {
+      drawFilledField(doc, nameLabel, data.payeeName, MARGIN, rowY1, CONTENT_WIDTH - nameLabelWidth, FIELD_SIZE);
+      const rowY2 = rowY1 + FIELD_SIZE * 1.35 + 10;
+      const idLabel = "เลขประจำตัวประชาชน ";
+      doc.font(FONT_REGULAR).fontSize(FIELD_SIZE);
+      const idLabelWidth = doc.widthOfString(idLabel);
+      drawFilledField(doc, idLabel, data.idNumber, MARGIN, rowY2, CONTENT_WIDTH - idLabelWidth, FIELD_SIZE);
+      doc.y = rowY2 + FIELD_SIZE * 1.35 + 14;
+    }
   }
 
-  drawRuns(
-    doc,
-    [r("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า", { size: FIELD_SIZE })],
-    MARGIN,
-    doc.y,
-    CONTENT_WIDTH,
-    "left"
-  );
-  doc.y += FIELD_SIZE * 1.35 + 4;
-  doc.y += drawFilledBlock(doc, data.expenseDetail, MARGIN + 16, doc.y, CONTENT_WIDTH - 16, FIELD_SIZE) + 12;
+  // "ได้รับเงินจาก...เป็นค่า" flows directly into the filled-in expense
+  // detail on the same line (continued text), wrapping automatically as a
+  // single paragraph — rather than a separate indented block below — with
+  // only the filled-in part underlined.
+  doc.font(FONT_REGULAR).fontSize(FIELD_SIZE).fillColor(INK);
+  doc.text("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า ", MARGIN, doc.y, {
+    width: CONTENT_WIDTH,
+    continued: true,
+  });
+  doc.text(data.expenseDetail, { underline: true });
+  doc.y += 16;
 
   doc.y += drawAmountLine(doc, amountNumberText, amountText, MARGIN, doc.y, CONTENT_WIDTH, FIELD_SIZE) + 22;
 
