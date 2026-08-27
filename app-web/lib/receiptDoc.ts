@@ -367,16 +367,18 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
   // stretches across to the right, which a centered short line wouldn't
   // leave enough room for.
   const SIGN_LABEL = "ลงชื่อ ";
+  const SIGN_LINE_LENGTH = 150;
   doc.font(FONT_REGULAR).fontSize(BODY_SIZE).fillColor(INK);
   const signLabelWidth = doc.widthOfString(SIGN_LABEL);
   doc.text(SIGN_LABEL, signX, signY, { lineBreak: false });
   const signLineY = signY + BODY_SIZE + 2;
+  const signLineEndX = Math.min(signX + signLabelWidth + SIGN_LINE_LENGTH, signX + SIGN_COL_WIDTH - 10);
   doc
     .save()
     .strokeColor(INK)
     .lineWidth(0.7)
     .moveTo(signX + signLabelWidth, signLineY)
-    .lineTo(signX + SIGN_COL_WIDTH - 10, signLineY)
+    .lineTo(signLineEndX, signLineY)
     .stroke()
     .restore();
 
