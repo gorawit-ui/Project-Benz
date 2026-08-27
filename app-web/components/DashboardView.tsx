@@ -80,7 +80,7 @@ export default function DashboardView() {
       setRows(data.rows as ExpenseRow[]);
       setFetchedAt(new Date());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      setError(err instanceof Error ? err.message : "อุ๊ปส์ มีบางอย่างไม่เรียบร้อย 😅 ลองใหม่อีกทีนะ");
     }
   }
 
@@ -135,7 +135,7 @@ export default function DashboardView() {
     } catch (err) {
       // Revert on failure.
       setRows((prev) => (prev ?? []).map((r) => (r.id === row.id ? { ...r, repaymentStatus: row.repaymentStatus } : r)));
-      setRepaymentError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      setRepaymentError(err instanceof Error ? err.message : "อุ๊ปส์ มีบางอย่างไม่เรียบร้อย 😅 ลองใหม่อีกทีนะ");
     } finally {
       setRepaymentBusyId(null);
     }
@@ -191,7 +191,7 @@ export default function DashboardView() {
       setRows((prev) =>
         (prev ?? []).map((r) => (r.id === row.id ? { ...r, status: previousStatus, note: row.note } : r))
       );
-      setCancelError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      setCancelError(err instanceof Error ? err.message : "อุ๊ปส์ มีบางอย่างไม่เรียบร้อย 😅 ลองใหม่อีกทีนะ");
     } finally {
       setCancelBusyId(null);
     }
@@ -311,12 +311,25 @@ export default function DashboardView() {
 
   const pettyCashPercent = PETTY_CASH_MONTHLY_LIMIT > 0 ? (pettyCashTotal / PETTY_CASH_MONTHLY_LIMIT) * 100 : 0;
   const pettyCashRemaining = PETTY_CASH_MONTHLY_LIMIT - pettyCashTotal;
+  // The label alone never explained the consequence, so the app silently
+  // switching a bill to เงินทดรองจ่าย came as a surprise. The note spells out
+  // what happens next.
   const pettyCashTone =
     pettyCashPercent >= 100
-      ? { bar: "bg-red-600", text: "text-red-700", label: "ใช้เกินวงเงินแล้ว" }
+      ? {
+          bar: "bg-red-600",
+          text: "text-red-700",
+          label: "เต็มวงเงินแล้ว",
+          note: "บิลใหม่เดือนนี้จะถูกตีเป็นเงินทดรองจ่ายให้อัตโนมัติ",
+        }
       : pettyCashPercent >= 80
-        ? { bar: "bg-amber-500", text: "text-amber-700", label: "ใกล้เต็มวงเงิน" }
-        : { bar: "bg-emerald-600", text: "text-emerald-700", label: "ปกติ" };
+        ? {
+            bar: "bg-amber-500",
+            text: "text-amber-700",
+            label: "ใกล้เต็มแล้วนะ",
+            note: `เหลืออีก ${formatCompactBaht(pettyCashRemaining)} — บิลที่เกินจากนี้จะถูกตีเป็นเงินทดรองจ่าย`,
+          }
+        : { bar: "bg-emerald-600", text: "text-emerald-700", label: "ปกติ", note: "" };
 
   return (
     <div className="space-y-8">
@@ -345,6 +358,9 @@ export default function DashboardView() {
               style={{ width: `${Math.min(pettyCashPercent, 100)}%` }}
             />
           </div>
+          {pettyCashTone.note && (
+            <p className={`mt-2 text-xs ${pettyCashTone.text}`}>{pettyCashTone.note}</p>
+          )}
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-xs text-zinc-500">
               วงเงินตั้งต้น {formatCompactBaht(PETTY_CASH_MONTHLY_LIMIT)} · ใช้ไป {formatCompactBaht(pettyCashTotal)}

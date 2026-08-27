@@ -28,16 +28,19 @@ function LoginPageContent() {
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
-        <h1 className="text-2xl font-bold text-emerald-800">TDFB Expense Tracking</h1>
+        <p className="text-4xl">🍃</p>
+        <h1 className="mt-2 text-2xl font-bold text-emerald-800">TDFB Expense Tracking</h1>
         <p className="mt-2 text-sm text-zinc-500">
-          ระบบบันทึกและติดตามค่าใช้จ่าย เงินสดย่อย / เงินทดรองจ่าย
+          ยินดีต้อนรับ! ที่นี่ใช้บันทึกและติดตามค่าใช้จ่าย
+          <br />
+          เงินสดย่อย / เงินทดรองจ่าย ของทีม
         </p>
 
         {error && (
           <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
             {error === "AccessDenied"
               ? "อีเมลนี้ยังไม่ได้รับสิทธิ์เข้าใช้งาน — รองรับเฉพาะอีเมล @tdfb.co ที่ถูกเพิ่มเข้าทีมในระบบแล้วเท่านั้น ติดต่อผู้ดูแลระบบหากคิดว่าควรมีสิทธิ์"
-              : "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"}
+              : "เข้าสู่ระบบไม่สำเร็จ 😅 ลองใหม่อีกทีนะ"}
           </p>
         )}
 

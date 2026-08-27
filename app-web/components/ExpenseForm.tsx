@@ -362,7 +362,12 @@ export default function ExpenseForm({
       setFundTypeTouched(false);
       setPettyCashContext(null);
     } catch (err) {
-      setMessage({ type: "error", text: err instanceof Error ? err.message : "เกิดข้อผิดพลาด" });
+      setMessage({
+        type: "error",
+        // Mention the draft: it has always been kept on a failed submit, but
+        // nothing ever told the user, so a failure still felt like data loss.
+        text: `${err instanceof Error ? err.message : "อุ๊ปส์ ส่งข้อมูลไม่สำเร็จ 😅"} — เช็คอินเทอร์เน็ตแล้วกดบันทึกอีกทีนะ ข้อมูลที่กรอกไว้ยังอยู่ครบ`,
+      });
     } finally {
       setSubmitting(false);
     }

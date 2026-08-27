@@ -270,7 +270,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       if (uploadError) setDriveWarning(decodeURIComponent(uploadError));
       showToast("สร้างเอกสารเสร็จแล้ว! 🎉");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      setError(err instanceof Error ? err.message : "อุ๊ปส์ มีบางอย่างไม่เรียบร้อย 😅 ลองใหม่อีกทีนะ");
     } finally {
       setSubmitting(false);
     }
@@ -557,15 +557,22 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         {submitting ? "กำลังสร้างเอกสาร..." : "สร้างเอกสารรับเงิน (.pdf)"}
       </button>
 
+      {/* Finishing a receipt document is more work than anything else in the
+          app, so the payoff gets more than a toast that vanishes. */}
       {downloadUrl && (
-        <a
-          href={downloadUrl}
-          download={downloadFilename}
-          onClick={() => showToast("ดาวน์โหลดแล้ว 📄")}
-          className="block w-full rounded-lg border border-emerald-700 px-4 py-3 text-center font-medium text-emerald-700 hover:bg-emerald-50"
-        >
-          ดาวน์โหลดเอกสารรับเงิน (.pdf)
-        </a>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-5 text-center">
+          <p className="text-3xl">🎉</p>
+          <p className="mt-2 text-sm font-semibold text-emerald-900">เอกสารพร้อมแล้ว!</p>
+          <p className="mt-1 text-xs text-emerald-700">โหลดเก็บไว้ หรือเปิดดูใน Drive ได้เลย</p>
+          <a
+            href={downloadUrl}
+            download={downloadFilename}
+            onClick={() => showToast("ดาวน์โหลดแล้ว 📄")}
+            className="mt-4 block w-full rounded-lg bg-emerald-700 px-4 py-3 text-center font-medium text-white transition-colors hover:bg-emerald-800"
+          >
+            ดาวน์โหลดเอกสารรับเงิน (.pdf)
+          </a>
+        </div>
       )}
 
       {toast && (

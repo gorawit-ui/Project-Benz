@@ -66,7 +66,7 @@ export default function NavBar() {
           </div>
           {now && (
             <span className="text-xs text-zinc-400">
-              {now.toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
+              {greetingFor(now)} · {now.toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
             </span>
           )}
         </div>
@@ -103,4 +103,12 @@ export default function NavBar() {
       </div>
     </header>
   );
+}
+
+/** Greets by time of day — the clock was already here, so this is free warmth. */
+function greetingFor(now: Date): string {
+  const hour = now.getHours();
+  if (hour < 12) return "สวัสดีตอนเช้า ☀️";
+  if (hour < 17) return "สวัสดีตอนบ่าย 🌤️";
+  return "สวัสดีตอนเย็น 🌙";
 }

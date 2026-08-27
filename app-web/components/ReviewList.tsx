@@ -41,7 +41,7 @@ export default function ReviewList() {
       const data = await res.json();
       setRows(data.rows as ExpenseRow[]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      setError(err instanceof Error ? err.message : "อุ๊ปส์ มีบางอย่างไม่เรียบร้อย 😅 ลองใหม่อีกทีนะ");
     }
   }
 
@@ -95,7 +95,7 @@ export default function ReviewList() {
       if (status === "ตรวจแล้ว") showToast("อนุมัติเรียบร้อย! 🎉");
       await load(selectedMonth);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
+      setError(err instanceof Error ? err.message : "อุ๊ปส์ มีบางอย่างไม่เรียบร้อย 😅 ลองใหม่อีกทีนะ");
     } finally {
       setBusyId(null);
     }
