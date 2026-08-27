@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Prompt } from "next/font/google";
 import SessionProviderWrapper from "@/components/SessionProviderWrapper";
@@ -18,6 +18,13 @@ const prompt = Prompt({
 export const metadata: Metadata = {
   title: "TDFB Expense Tracking",
   description: "ระบบบันทึกและติดตามค่าใช้จ่าย TDFB",
+  // Lets iOS run the app full-screen once added to the home screen; Android
+  // takes this from the manifest's display/theme_color instead.
+  appleWebApp: { capable: true, title: "TDFB Expense", statusBarStyle: "black-translucent" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#065f46", // tints the mobile browser chrome to the brand colour
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
