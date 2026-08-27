@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { numberToThaiBahtText } from "@/lib/thaiBahtText";
 import type { ExpenseRow } from "@/lib/sheets";
 import type { PayeeTemplate } from "@/lib/payeeTemplates";
+import { formatThaiNationalId } from "@/lib/thaiId";
+import ComboBox from "./ComboBox";
 
 export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName: string }) {
   const [payeeName, setPayeeName] = useState(defaultPayeeName);
@@ -93,13 +95,19 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
     };
   }, []);
 
-  function applyTemplate(name: string) {
-    const template = templates.find((t) => t.payeeName === name) ?? null;
-    setSelectedTemplate(template);
-    if (!template) return;
-    setPayeeName(template.payeeName);
-    setIdNumber(template.idNumber);
-    // Clear any locally-attached file: the saved Drive image is used instead
+  /**
+   * Handles the name field. Typing anything that isn't a saved payee just
+   * sets the name; landing exactly on a saved one also fills their ID and
+   * switches to their stored card image.
+   */
+  function handlePayeeNameChange(name: string) {
+    setPayeeName(name);
+    const match = templates.find((t) => t.payeeName === name) ?? null;
+    setSelectedTemplate(match);
+    setConfirmDeleteName(null);
+    if (!match) return;
+    setIdNumber(match.idNumber);
+    // Drop any locally-attached file: the saved Drive image is used instead
     // (the server re-reads it by id), and keeping both would be ambiguous.
     setIdCardImage(null);
   }
@@ -270,103 +278,105 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-      {/* Saved payees — the fast path: pick a person, then only the
-          description and amount are left to fill in. */}
-      {templates.length > 0 && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
-          <label className={labelClass} htmlFor="payee-template">
-            เลือกผู้รับเงินที่บันทึกไว้
-          </label>
-          <select
-            id="payee-template"
-            className={inputClass}
-            value={selectedTemplate?.payeeName ?? ""}
-            onChange={(e) => applyTemplate(e.target.value)}
-          >
-            <option value="">— กรอกใหม่เอง —</option>
-            {templates.map((t) => (
-              <option key={t.payeeName} value={t.payeeName}>
-                {t.payeeName}
-                {t.idNumber ? ` · ${t.idNumber}` : ""}
-              </option>
-            ))}
-          </select>
-          {selectedTemplate && (
-            <>
-              <p className="mt-2 text-xs text-emerald-800">
-                เติมชื่อและเลขบัตรให้แล้ว
-                {selectedTemplate.idCardFileId
-                  ? " · ใช้รูปบัตรที่บันทึกไว้ ไม่ต้องแนบใหม่"
-                  : " · ยังไม่มีรูปบัตรที่บันทึกไว้"}
-                {" — เหลือแค่กรอกรายละเอียดกับจำนวนเงิน"}
-              </p>
-
-              {confirmDeleteName === selectedTemplate.payeeName ? (
-                <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2.5">
-                  <p className="text-xs text-red-800">
-                    ลบ &quot;{selectedTemplate.payeeName}&quot; ออกจากรายการที่บันทึกไว้?
-                    <span className="mt-0.5 block text-red-600">
-                      ข้อมูลที่กรอกในฟอร์มนี้ยังอยู่ · บันทึกใหม่ได้ทุกเมื่อ
-                    </span>
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      type="button"
-                      disabled={templateBusy}
-                      onClick={() => void handleDeleteTemplate(selectedTemplate.payeeName)}
-                      className="flex-1 rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
-                    >
-                      {templateBusy ? "กำลังลบ..." : "ยืนยันลบ"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={templateBusy}
-                      onClick={() => setConfirmDeleteName(null)}
-                      className="flex-1 rounded-md border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 sm:flex-none"
-                    >
-                      ยกเลิก
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTemplateNotice(null);
-                    setConfirmDeleteName(selectedTemplate.payeeName);
-                  }}
-                  className="mt-2 text-xs font-medium text-red-600 underline-offset-2 hover:underline"
-                >
-                  ลบชื่อนี้ออกจากรายการ
-                </button>
-              )}
-              {templateNotice && confirmDeleteName === null && (
-                <p className="mt-2 text-xs text-red-600">{templateNotice}</p>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
+      {/* The saved-payee picker lives ON the name field rather than in a box
+          above it: choosing a saved person IS a way of filling this field, and
+          a separate control repeated the name and ID immediately below itself. */}
       <div>
-        <label className={labelClass}>ชื่อผู้รับเงิน</label>
-        <input
+        <label className={labelClass} htmlFor="payee-name">
+          ชื่อผู้รับเงิน
+        </label>
+        <ComboBox
+          id="payee-name"
           className={inputClass}
           value={payeeName}
-          onChange={(e) => setPayeeName(e.target.value)}
+          onChange={handlePayeeNameChange}
+          options={templates.map((t) => ({
+            value: t.payeeName,
+            meta: formatThaiNationalId(t.idNumber),
+          }))}
+          // A national ID is a detail about the person, not a tag for them —
+          // it belongs under the name, the way a contact list reads.
+          optionLayout="stacked"
+          placeholder="พิมพ์ชื่อ หรือแตะเพื่อเลือกจากที่บันทึกไว้"
           required
         />
       </div>
 
       <div>
-        <label className={labelClass}>เลขประจำตัวประชาชน</label>
+        <label className={labelClass} htmlFor="payee-id">
+          เลขประจำตัวประชาชน
+        </label>
         <input
+          id="payee-id"
           className={inputClass}
           value={idNumber}
           onChange={(e) => setIdNumber(e.target.value)}
-          placeholder="x-xxxx-xxxxx-xx-x"
+          inputMode="numeric"
           required
         />
+        {idNumber.replace(/\D/g, "").length === 13 && (
+          <p className="mt-1 font-mono text-xs tracking-wide text-zinc-500">
+            {formatThaiNationalId(idNumber)}
+          </p>
+        )}
+
+        {/* Shown only once a saved payee is actually in use: this describes
+            the result of picking one, so it belongs with the filled fields. */}
+        {selectedTemplate && selectedTemplate.payeeName === payeeName && (
+          <>
+            <p className="mt-1.5 text-xs text-emerald-700">
+              เติมจากชื่อที่บันทึกไว้
+              {selectedTemplate.idCardFileId ? " · ใช้รูปบัตรเดิม ไม่ต้องแนบใหม่" : " · ยังไม่มีรูปบัตรที่บันทึกไว้"}
+              {confirmDeleteName !== selectedTemplate.payeeName && (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTemplateNotice(null);
+                      setConfirmDeleteName(selectedTemplate.payeeName);
+                    }}
+                    className="font-medium text-red-600 underline underline-offset-2"
+                  >
+                    ลบชื่อนี้
+                  </button>
+                </>
+              )}
+            </p>
+
+            {confirmDeleteName === selectedTemplate.payeeName && (
+              <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2.5">
+                <p className="text-xs text-red-800">
+                  ลบ &quot;{selectedTemplate.payeeName}&quot; ออกจากรายการที่บันทึกไว้?
+                  <span className="mt-0.5 block text-red-600">
+                    ข้อมูลที่กรอกในฟอร์มนี้ยังอยู่ · บันทึกใหม่ได้ทุกเมื่อ
+                  </span>
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={templateBusy}
+                    onClick={() => void handleDeleteTemplate(selectedTemplate.payeeName)}
+                    className="flex-1 rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
+                  >
+                    {templateBusy ? "กำลังลบ..." : "ยืนยันลบ"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={templateBusy}
+                    onClick={() => setConfirmDeleteName(null)}
+                    className="flex-1 rounded-md border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 sm:flex-none"
+                  >
+                    ยกเลิก
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        {templateNotice && confirmDeleteName === null && (
+          <p className="mt-1.5 text-xs text-red-600">{templateNotice}</p>
+        )}
       </div>
 
       <div>
