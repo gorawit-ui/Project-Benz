@@ -179,11 +179,14 @@ export default function ComboBox({
                       commit(option);
                     }}
                     onMouseEnter={() => setHighlight(i)}
-                    className={`flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm ${
+                    // flex-wrap + a label floor: in a narrow popup the chip
+                    // drops onto its own line instead of squeezing the label
+                    // into a one-word-per-line column.
+                    className={`flex w-full flex-wrap items-start gap-x-2 gap-y-1 px-3 py-2.5 text-left text-sm ${
                       i === highlight ? "bg-emerald-50" : ""
                     } ${selected ? "font-semibold text-emerald-800" : "text-zinc-700"}`}
                   >
-                    <span className="min-w-0 flex-1 break-words">{label}</span>
+                    <span className="min-w-[9rem] flex-1 break-words">{label}</span>
                     {code &&
                       (() => {
                         const { prefix, padding, digits } = splitCode(code);
