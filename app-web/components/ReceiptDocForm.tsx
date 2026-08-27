@@ -344,7 +344,12 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
                   title={`ลบ ${selectedTemplate.payeeName} ออกจากรายการที่บันทึกไว้`}
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700"
                 >
-                  <TrashIcon />
+                  {/* aria-hidden: the label right beside it already says
+                      what this does, so a screen reader announcing
+                      "wastebasket" first would just be noise. */}
+                  <span aria-hidden="true" className="text-sm leading-none">
+                    🗑️
+                  </span>
                   ลบชื่อนี้
                 </button>
               )}
@@ -596,20 +601,5 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         </div>
       )}
     </form>
-  );
-}
-
-/**
- * Drawn rather than an emoji: 🗑 renders as a different picture on every
- * platform (and in colour), which reads as decoration next to flat form
- * controls. An inline SVG inherits the button's own text colour, so it
- * shifts to red on hover along with the label.
- */
-function TrashIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M10 11v6M14 11v6" strokeLinecap="round" />
-    </svg>
   );
 }
