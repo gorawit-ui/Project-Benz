@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExpenseRow, ExpenseStatus } from "@/lib/sheets";
 
 // Monthly petty-cash threshold, mirrored from the classification logic used
@@ -43,10 +43,28 @@ export default function DashboardView() {
   // "ยกเลิก" is the "log" of cancelled entries the product owner asked for —
   // a dedicated place to look them up rather than mixed into the normal list.
   const [statusFilter, setStatusFilter] = useState<"" | "ยกเลิก">("");
-  const [cancelDraftId, setCancelDraftId] = useState<string | null>(null);
+  // The row currently shown in the cancel modal (null = closed) — a modal
+  // rather than an inline row, so it doesn't force the already-wide table
+  // even wider on a phone.
+  const [cancelModalRow, setCancelModalRow] = useState<ExpenseRow | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelBusyId, setCancelBusyId] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Floating confirmation that auto-dismisses. */
+  function showToast(message: string) {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast(message);
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 2500);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   async function loadRows(month: string) {
     setError(null);
@@ -122,14 +140,14 @@ export default function DashboardView() {
     }
   }
 
-  function openCancelDraft(rowId: string) {
+  function openCancelModal(row: ExpenseRow) {
     setCancelError(null);
     setCancelReason("");
-    setCancelDraftId(rowId);
+    setCancelModalRow(row);
   }
 
-  function closeCancelDraft() {
-    setCancelDraftId(null);
+  function closeCancelModal() {
+    setCancelModalRow(null);
     setCancelReason("");
   }
 
@@ -165,7 +183,8 @@ export default function DashboardView() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "ยกเลิกรายการไม่สำเร็จ");
       }
-      closeCancelDraft();
+      closeCancelModal();
+      showToast("ยกเลิกสำเร็จ!");
     } catch (err) {
       // Revert on failure.
       setRows((prev) =>
@@ -253,9 +272,26 @@ export default function DashboardView() {
     </select>
   );
 
+  // Floating, auto-dismissing confirmation — rendered in every branch below.
+  const toastElement = toast && (
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex items-center gap-2 rounded-full bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white shadow-lg"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {toast}
+      </div>
+    </div>
+  );
+
   if (error) {
     return (
       <div className="space-y-3">
+        {toastElement}
         {monthSelect}
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       </div>
@@ -265,6 +301,7 @@ export default function DashboardView() {
   if (rows === null) {
     return (
       <div className="space-y-3">
+        {toastElement}
         {monthSelect}
         <p className="text-sm text-zinc-500">กำลังโหลด...</p>
       </div>
@@ -282,6 +319,7 @@ export default function DashboardView() {
 
   return (
     <div className="space-y-8">
+      {toastElement}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {monthSelect}
         <p className="text-xs text-zinc-400">
@@ -424,35 +462,104 @@ export default function DashboardView() {
         />
       </div>
 
-      {/* Data table */}
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-zinc-200 text-left text-xs font-bold text-zinc-400">
-              <th className="px-4 py-3">วันที่</th>
-              <th className="px-4 py-3">ผู้บันทึก</th>
-              <th className="px-4 py-3">ร้านค้า</th>
-              <th className="px-4 py-3">หมวดหมู่</th>
-              <th className="px-4 py-3">ยอดเงิน</th>
-              <th className="px-4 py-3">ประเภทเงิน</th>
-              <th className="px-4 py-3">สถานะ</th>
-              <th className="px-4 py-3">จ่ายคืน</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRows.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-4 py-6 text-center text-zinc-400">
-                  ไม่พบรายการ
-                </td>
-              </tr>
-            ) : (
-              filteredRows.map((row) => {
-                const cancelled = row.status === "ยกเลิก";
-                return (
-                  <Fragment key={row.id}>
-                    <tr className={`border-t border-zinc-100 ${cancelled ? "bg-zinc-50" : ""}`}>
+      {/* Data — card list on mobile, table from sm: up. Same filteredRows,
+          two renderings so small screens never get the 720px-wide table. */}
+      {filteredRows.length === 0 ? (
+        <p className="rounded-xl border border-zinc-200 bg-white px-4 py-6 text-center text-sm text-zinc-400 shadow-sm">
+          ไม่พบรายการ
+        </p>
+      ) : (
+        <>
+          {/* Mobile card list */}
+          <div className="space-y-3 sm:hidden">
+            {filteredRows.map((row) => {
+              const cancelled = row.status === "ยกเลิก";
+              return (
+                <div
+                  key={row.id}
+                  className={`rounded-xl border p-4 shadow-sm ${cancelled ? "border-zinc-200 bg-zinc-50" : "border-zinc-200 bg-white"}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className={`truncate font-medium ${cancelled ? "text-zinc-400" : "text-zinc-800"}`}>
+                        {row.supplierNameTh}
+                        {row.supplierNameEn ? ` (${row.supplierNameEn})` : ""}
+                      </p>
+                      <p className="text-xs text-zinc-400">
+                        {row.billDate} · {row.recordedBy}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-block shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${STATUS_BADGE[row.status]}`}
+                    >
+                      {row.status}
+                    </span>
+                  </div>
+
+                  {cancelled && row.note && (
+                    <p className="mt-2 text-xs text-zinc-400">เหตุผลที่ยกเลิก: {row.note}</p>
+                  )}
+
+                  <div className="mt-3 flex items-center justify-between text-sm">
+                    <span className={cancelled ? "text-zinc-400" : "text-zinc-500"}>
+                      {row.odooCategory} · {row.fundType}
+                    </span>
+                    <span className={`font-semibold ${cancelled ? "text-zinc-400" : "text-zinc-800"}`}>
+                      {formatBaht(row.grandTotal)}
+                    </span>
+                  </div>
+
+                  {!cancelled && (
+                    <div className="mt-3 flex gap-2 border-t border-zinc-100 pt-3">
+                      {row.fundType === "เงินทดรองจ่าย" && (
+                        <button
+                          type="button"
+                          disabled={repaymentBusyId === row.id}
+                          onClick={() => handleToggleRepayment(row)}
+                          className={`flex-1 rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50 ${
+                            row.repaymentStatus === "จ่ายคืนแล้ว"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-zinc-100 text-zinc-500"
+                          }`}
+                        >
+                          {row.repaymentStatus === "จ่ายคืนแล้ว" ? "จ่ายคืนแล้ว" : "ยังไม่จ่ายคืน"}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => openCancelModal(row)}
+                        className="flex-1 rounded-md border border-red-200 px-3 py-2 text-xs font-medium text-red-600"
+                      >
+                        ยกเลิก
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Table, sm: and up */}
+          <div className="hidden overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm sm:block">
+            <table className="w-full min-w-[720px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200 text-left text-xs font-bold text-zinc-400">
+                  <th className="px-4 py-3">วันที่</th>
+                  <th className="px-4 py-3">ผู้บันทึก</th>
+                  <th className="px-4 py-3">ร้านค้า</th>
+                  <th className="px-4 py-3">หมวดหมู่</th>
+                  <th className="px-4 py-3">ยอดเงิน</th>
+                  <th className="px-4 py-3">ประเภทเงิน</th>
+                  <th className="px-4 py-3">สถานะ</th>
+                  <th className="px-4 py-3">จ่ายคืน</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row) => {
+                  const cancelled = row.status === "ยกเลิก";
+                  return (
+                    <tr key={row.id} className={`border-t border-zinc-100 ${cancelled ? "bg-zinc-50" : ""}`}>
                       <td className={`px-4 py-3 ${cancelled ? "text-zinc-400" : "text-zinc-600"}`}>{row.billDate}</td>
                       <td className={`px-4 py-3 ${cancelled ? "text-zinc-400" : "text-zinc-600"}`}>{row.recordedBy}</td>
                       <td className={`px-4 py-3 font-medium ${cancelled ? "text-zinc-400" : "text-zinc-800"}`}>
@@ -496,7 +603,7 @@ export default function DashboardView() {
                         {!cancelled && (
                           <button
                             type="button"
-                            onClick={() => openCancelDraft(row.id)}
+                            onClick={() => openCancelModal(row)}
                             className="text-xs font-medium text-red-600 underline-offset-2 hover:underline"
                           >
                             ยกเลิก
@@ -504,48 +611,54 @@ export default function DashboardView() {
                         )}
                       </td>
                     </tr>
-                    {cancelDraftId === row.id && (
-                      <tr className="border-t border-red-100 bg-red-50">
-                        <td colSpan={9} className="px-4 py-3">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <input
-                              type="text"
-                              autoFocus
-                              placeholder="เหตุผลที่ยกเลิกรายการนี้ (จำเป็น)"
-                              value={cancelReason}
-                              onChange={(e) => setCancelReason(e.target.value)}
-                              className="w-full flex-1 rounded-md border border-red-300 bg-white px-3 py-2 text-sm sm:w-auto"
-                            />
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                disabled={cancelBusyId === row.id}
-                                onClick={() => void confirmCancel(row)}
-                                className="flex-1 rounded-md bg-red-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
-                              >
-                                {cancelBusyId === row.id ? "กำลังยกเลิก..." : "ยืนยันยกเลิกรายการ"}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={cancelBusyId === row.id}
-                                onClick={closeCancelDraft}
-                                className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 sm:flex-none"
-                              >
-                                ปิด
-                              </button>
-                            </div>
-                          </div>
-                          {cancelError && <p className="mt-2 text-xs text-red-700">{cancelError}</p>}
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Cancel-reason modal — pops up instead of an inline row so the flow
+          stays usable on a phone. */}
+      {cancelModalRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-sm font-bold text-zinc-900">ยกเลิกรายการ</h3>
+            <p className="mt-1 text-xs text-zinc-500">
+              {cancelModalRow.supplierNameTh} · {formatBaht(cancelModalRow.grandTotal)}
+            </p>
+            <label className="mt-4 block text-xs font-medium text-zinc-600">เหตุผลที่ยกเลิก (จำเป็น)</label>
+            <textarea
+              autoFocus
+              rows={3}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="เช่น กรอกยอดผิด, ซ้ำกับรายการอื่น..."
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+            />
+            {cancelError && <p className="mt-2 text-xs text-red-700">{cancelError}</p>}
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                disabled={cancelBusyId === cancelModalRow.id}
+                onClick={closeCancelModal}
+                className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-100"
+              >
+                ปิด
+              </button>
+              <button
+                type="button"
+                disabled={cancelBusyId === cancelModalRow.id}
+                onClick={() => void confirmCancel(cancelModalRow)}
+                className="flex-1 rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {cancelBusyId === cancelModalRow.id ? "กำลังยกเลิก..." : "ยืนยันยกเลิกรายการ"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
