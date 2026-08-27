@@ -9,6 +9,7 @@
  * user's own Google OAuth access token onto the session) is well trodden.
  */
 import type { NextAuthOptions } from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import GoogleProvider from "next-auth/providers/google";
 import { getTeamForEmail } from "./teams";
 
@@ -25,6 +26,46 @@ const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
   "https://www.googleapis.com/auth/drive.file",
 ].join(" ");
+
+/**
+ * Exchanges the stored Google refresh_token for a new access_token, since
+ * the one issued at sign-in only lasts ~1 hour — without this, every
+ * Sheets/Drive call starts failing with "invalid authentication
+ * credentials" partway through a normal work session, and the only way out
+ * was signing out and back in. Google may or may not issue a new
+ * refresh_token on rotation; when it doesn't, the existing one keeps
+ * working and must be kept rather than dropped.
+ */
+async function refreshAccessToken(token: JWT): Promise<JWT> {
+  try {
+    if (!token.refreshToken) throw new Error("no refresh token available");
+
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+        client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+        grant_type: "refresh_token",
+        refresh_token: token.refreshToken,
+      }),
+    });
+
+    const refreshed = await response.json();
+    if (!response.ok) throw refreshed;
+
+    return {
+      ...token,
+      accessToken: refreshed.access_token,
+      accessTokenExpires: Date.now() + refreshed.expires_in * 1000,
+      refreshToken: refreshed.refresh_token ?? token.refreshToken,
+      error: undefined,
+    };
+  } catch (err) {
+    console.error("refreshAccessToken failed", err);
+    return { ...token, error: "RefreshAccessTokenError" };
+  }
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -70,10 +111,11 @@ export const authOptions: NextAuthOptions = {
     // onto the JWT so server-side code can call Sheets/Drive APIs as this
     // user. Also resolve and persist which team this user belongs to, so
     // every Sheet/Drive/receipt-doc operation downstream scopes itself to
-    // that team automatically. NOTE: this does not implement refresh-token
-    // rotation — once the short-lived Google access_token expires (~1 hour)
-    // the user will need to sign in again. Rotating via refreshToken is a
-    // documented follow-up.
+    // that team automatically. Once the short-lived Google access_token
+    // (~1 hour) is at or past its expiry, transparently exchanges the
+    // refresh_token for a new one via refreshAccessToken rather than
+    // leaving every subsequent Sheets/Drive call to fail with "invalid
+    // authentication credentials".
     async jwt({ token, account }) {
       if (account) {
         token.accessToken = account.access_token;
@@ -86,13 +128,20 @@ export const authOptions: NextAuthOptions = {
 
         const team = getTeamForEmail(token.email);
         token.team = team ? { key: team.key, name: team.name } : undefined;
+        return token;
       }
-      return token;
+
+      if (token.accessTokenExpires && Date.now() < token.accessTokenExpires) {
+        return token;
+      }
+
+      return refreshAccessToken(token);
     },
 
     async session({ session, token }) {
       session.accessToken = token.accessToken;
       session.accessTokenExpires = token.accessTokenExpires;
+      session.error = token.error;
       session.team = token.team;
       return session;
     },

@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { signIn, signOut, useSession } from "next-auth/react";
 
 const LINKS = [
   { href: "/", label: "บันทึกค่าใช้จ่าย" },
@@ -14,6 +15,20 @@ const LINKS = [
 export default function NavBar() {
   const { data: session } = useSession();
   const pathname = usePathname();
+
+  // The jwt callback (lib/auth.ts) tries to silently refresh an expired
+  // Google access token; this only fires if that refresh itself failed
+  // (e.g. the refresh_token was revoked) — the session is carrying a dead
+  // accessToken at that point, so every Sheets/Drive call would keep
+  // failing until the user re-authorizes. Kick off a fresh Google sign-in
+  // automatically rather than leaving that to show up as a confusing error
+  // partway through some unrelated action.
+  useEffect(() => {
+    if (session?.error === "RefreshAccessTokenError") {
+      void signIn("google");
+    }
+  }, [session?.error]);
+
   if (!session) return null;
 
   return (
