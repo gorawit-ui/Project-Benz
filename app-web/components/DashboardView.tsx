@@ -377,18 +377,20 @@ export default function DashboardView() {
                   <td className="px-4 py-3 text-zinc-600">{row.odooCategory}</td>
                   <td className="px-4 py-3 font-semibold text-zinc-800">{formatBaht(row.grandTotal)}</td>
                   <td className="px-4 py-3 text-zinc-500">{row.fundType}</td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_BADGE[row.status]}`}>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <span
+                      className={`inline-block whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${STATUS_BADGE[row.status]}`}
+                    >
                       {row.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="whitespace-nowrap px-4 py-3">
                     {row.fundType === "เงินทดรองจ่าย" ? (
                       <button
                         type="button"
                         disabled={repaymentBusyId === row.id}
                         onClick={() => handleToggleRepayment(row)}
-                        className={`rounded-full px-3 py-1 text-xs font-medium disabled:opacity-50 ${
+                        className={`inline-block whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium disabled:opacity-50 ${
                           row.repaymentStatus === "จ่ายคืนแล้ว"
                             ? "bg-emerald-50 text-emerald-700"
                             : "bg-zinc-100 text-zinc-500"
