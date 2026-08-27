@@ -5,6 +5,7 @@ import type { DocumentType, ExpenseRow, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { findDuplicateExpense } from "@/lib/duplicateCheck";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS, getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
+import ComboBox from "./ComboBox";
 
 const DOCUMENT_TYPES: DocumentType[] = ["ใบเสร็จรับเงิน", "ใบกำกับภาษี", "บิลเงินสด"];
 
@@ -421,13 +422,15 @@ export default function ExpenseForm({
         </div>
 
         <div>
-          <label className={labelClass}>หมวดหมู่ (ตาม Odoo)</label>
-          <input
+          <label className={labelClass} htmlFor="odoo-category">
+            หมวดหมู่ (ตาม Odoo)
+          </label>
+          <ComboBox
+            id="odoo-category"
             className={inputClass}
-            list="odoo-category-options"
+            options={CATEGORY_OPTIONS}
             value={form.odooCategory}
-            onChange={(e) => {
-              const value = e.target.value;
+            onChange={(value) => {
               set("odooCategory", value);
               // Category and acc name always pair together — picking a
               // known category (from the dropdown, or auto-matched) fills
@@ -438,27 +441,20 @@ export default function ExpenseForm({
             placeholder="พิมพ์เพื่อค้นหา เช่น เดินทาง, อาหาร"
             required
           />
-          <datalist id="odoo-category-options">
-            {CATEGORY_OPTIONS.map((option) => (
-              <option key={option} value={option} />
-            ))}
-          </datalist>
         </div>
 
         <div>
-          <label className={labelClass}>ชื่อบัญชี (Acc name)</label>
-          <input
+          <label className={labelClass} htmlFor="acc-name">
+            ชื่อบัญชี (Acc name)
+          </label>
+          <ComboBox
+            id="acc-name"
             className={inputClass}
-            list="acc-name-options"
+            options={ACC_NAME_OPTIONS}
             value={form.accName}
-            onChange={(e) => set("accName", e.target.value)}
+            onChange={(value) => set("accName", value)}
             placeholder="พิมพ์เพื่อค้นหา เช่น สวัสดิการ, ไฟฟ้า"
           />
-          <datalist id="acc-name-options">
-            {ACC_NAME_OPTIONS.map((option) => (
-              <option key={option} value={option} />
-            ))}
-          </datalist>
         </div>
       </div>
 
