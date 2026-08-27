@@ -104,6 +104,7 @@ export default function ComboBox({
   const [query, setQuery] = useState<string | null>(null); // null = not filtering yet
   const [highlight, setHighlight] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const generatedId = useId();
   const listId = `${id ?? generatedId}-listbox`;
@@ -177,6 +178,7 @@ export default function ComboBox({
   return (
     <div ref={wrapperRef} className="relative">
       <input
+        ref={inputRef}
         id={id}
         // pr-9 keeps typed text clear of the caret sitting in the field.
         className={`${inputClass} pr-9`}
@@ -200,12 +202,36 @@ export default function ComboBox({
       />
 
       {/* Without this the field reads as a plain text box and nothing hints
-          that there are saved options behind it. */}
-      <span className="pointer-events-none absolute right-3 top-1/2 mt-0.5 -translate-y-1/2 text-zinc-400">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          that there are saved options behind it.
+
+          A real button, not decoration: a caret that can't be clicked still
+          shows the input's text cursor underneath, which says "type here"
+          exactly where the affordance says "open this". It toggles, and is
+          skipped by Tab — the input already opens the list from the keyboard,
+          so a second stop would just be in the way. */}
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-hidden="true"
+        onMouseDown={(e) => {
+          e.preventDefault(); // keep focus (and the caret position) in the input
+          setOpen((wasOpen) => !wasOpen);
+          inputRef.current?.focus();
+        }}
+        className="absolute right-0 top-0 flex h-full cursor-pointer items-center px-3 text-zinc-400 transition-colors hover:text-zinc-600"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          className={`transition-transform ${open ? "rotate-180" : ""}`}
+        >
           <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      </span>
+      </button>
 
       {open && (
         <ul

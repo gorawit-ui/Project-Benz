@@ -324,25 +324,31 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
             the result of picking one, so it belongs with the filled fields. */}
         {selectedTemplate && selectedTemplate.payeeName === payeeName && (
           <>
-            <p className="mt-1.5 text-xs text-emerald-700">
-              เติมจากชื่อที่บันทึกไว้
-              {selectedTemplate.idCardFileId ? " · ใช้รูปบัตรเดิม ไม่ต้องแนบใหม่" : " · ยังไม่มีรูปบัตรที่บันทึกไว้"}
+            {/* Info and action separated: the delete was previously a word
+                inside this sentence, which read as prose rather than
+                something pressable. */}
+            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-emerald-700">
+                เติมจากชื่อที่บันทึกไว้
+                {selectedTemplate.idCardFileId
+                  ? " · ใช้รูปบัตรเดิม ไม่ต้องแนบใหม่"
+                  : " · ยังไม่มีรูปบัตรที่บันทึกไว้"}
+              </p>
               {confirmDeleteName !== selectedTemplate.payeeName && (
-                <>
-                  {" · "}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTemplateNotice(null);
-                      setConfirmDeleteName(selectedTemplate.payeeName);
-                    }}
-                    className="font-medium text-red-600 underline underline-offset-2"
-                  >
-                    ลบชื่อนี้
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTemplateNotice(null);
+                    setConfirmDeleteName(selectedTemplate.payeeName);
+                  }}
+                  title={`ลบ ${selectedTemplate.payeeName} ออกจากรายการที่บันทึกไว้`}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                >
+                  <TrashIcon />
+                  ลบชื่อนี้
+                </button>
               )}
-            </p>
+            </div>
 
             {confirmDeleteName === selectedTemplate.payeeName && (
               <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2.5">
@@ -590,5 +596,20 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         </div>
       )}
     </form>
+  );
+}
+
+/**
+ * Drawn rather than an emoji: 🗑 renders as a different picture on every
+ * platform (and in colour), which reads as decoration next to flat form
+ * controls. An inline SVG inherits the button's own text colour, so it
+ * shifts to red on hover along with the label.
+ */
+function TrashIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 11v6M14 11v6" strokeLinecap="round" />
+    </svg>
   );
 }
