@@ -95,8 +95,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const row: ExpenseRow = {
-    id: generateExpenseId(),
+  const row: Omit<ExpenseRow, "id"> = {
     recordedAt: new Date().toISOString(),
     recordedBy: session.user.name ?? session.user.email ?? "unknown",
     status: "รอตรวจ",
@@ -130,9 +129,11 @@ export async function POST(req: NextRequest) {
     // A late entry for a prior month must file into THAT month's own tab,
     // not today's — resolve the target tab from the submitted billDate.
     const tabName = monthLabelForBillDate(row.billDate);
+    const id = await generateExpenseId(session.accessToken, team.sheetId, team.key.toUpperCase());
+    const fullRow: ExpenseRow = { id, ...row };
     await ensureMonthTabExists(session.accessToken, team.sheetId, tabName);
-    await appendExpenseRow(session.accessToken, team.sheetId, tabName, row);
-    return NextResponse.json({ row }, { status: 201 });
+    await appendExpenseRow(session.accessToken, team.sheetId, tabName, fullRow);
+    return NextResponse.json({ row: fullRow }, { status: 201 });
   } catch (err) {
     console.error("POST /api/expenses failed", err);
     return NextResponse.json({ error: "บันทึกรายการลง Google Sheet ไม่สำเร็จ" }, { status: 500 });

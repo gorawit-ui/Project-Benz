@@ -219,11 +219,38 @@ export function valuesToRow(values: unknown[]): ExpenseRow {
   };
 }
 
-/** Generates a new "รหัสรายการ" (system id). Not sequential — a timestamp-
- * based unique id. Real sequential numbering (e.g. EX-2026-0001) would need
- * to read the sheet's current max id first; left as a follow-up. */
-export function generateExpenseId(): string {
-  return `EX-${Date.now().toString(36).toUpperCase()}`;
+/**
+ * Generates the next sequential "รหัสรายการ" for `prefix` (the team's key,
+ * uppercased — "GM", "HR", ...), e.g. "GM00001", "GM00002". Each team has
+ * its own separate spreadsheet, so this only needs to stay unique within
+ * it: scans every month tab's ID column for the highest existing
+ * `${prefix}NNNNN` id and returns the next one (starting at 1 if none
+ * exist yet). Scanning is cheap — one single-column range read per month
+ * tab, done in parallel, a handful of tabs at most for a pilot team.
+ */
+export async function generateExpenseId(accessToken: string, sheetId: string, prefix: string): Promise<string> {
+  const sheets = sheetsClient(accessToken);
+  const tabNames = await listMonthTabNames(accessToken, sheetId);
+  const idColumnLetter = columnIndexToLetter(COLUMN_INDEX.id);
+
+  const idsByTab = await Promise.all(
+    tabNames.map((tabName) =>
+      sheets.spreadsheets.values
+        .get({ spreadsheetId: sheetId, range: `'${tabName}'!${idColumnLetter}${DATA_START_ROW}:${idColumnLetter}` })
+        .then((res) => (res.data.values ?? []).map((r) => r[0]))
+    )
+  );
+
+  const pattern = new RegExp(`^${prefix}(\\d+)$`);
+  let max = 0;
+  for (const ids of idsByTab) {
+    for (const id of ids) {
+      const match = typeof id === "string" ? pattern.exec(id) : null;
+      if (match) max = Math.max(max, Number(match[1]));
+    }
+  }
+
+  return `${prefix}${String(max + 1).padStart(5, "0")}`;
 }
 
 /**
