@@ -347,7 +347,7 @@ export default function ExpenseForm({
         throw new Error(err.error || "บันทึกรายการไม่สำเร็จ");
       }
 
-      setMessage({ type: "success", text: "บันทึกรายการเรียบร้อย สถานะ: รอตรวจ" });
+      setMessage({ type: "success", text: "บันทึกรายการเรียบร้อยแล้ว 🎉 ส่งเข้ารอตรวจให้เลย" });
       // Only now is the draft safe to drop — a failed submit above keeps it.
       try {
         window.localStorage.removeItem(DRAFT_KEY);
@@ -450,7 +450,7 @@ export default function ExpenseForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-      <p className="text-xs text-zinc-400">ผู้บันทึก: {recordedByName}</p>
+      <p className="text-xs text-zinc-400">บันทึกโดย {recordedByName} 👋</p>
 
       {/* Unsent work from a previous visit. Restoring is the user's call —
           applying it automatically could clobber a form already in progress. */}

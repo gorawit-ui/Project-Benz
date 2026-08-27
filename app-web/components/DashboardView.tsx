@@ -185,7 +185,7 @@ export default function DashboardView() {
         throw new Error(err.error || "ยกเลิกรายการไม่สำเร็จ");
       }
       closeCancelModal();
-      showToast("ยกเลิกสำเร็จ!");
+      showToast("ยกเลิกรายการแล้ว 👌");
     } catch (err) {
       // Revert on failure.
       setRows((prev) =>
@@ -304,7 +304,7 @@ export default function DashboardView() {
       <div className="space-y-3">
         {toastElement}
         {monthSelect}
-        <p className="text-sm text-zinc-500">กำลังโหลด...</p>
+        <p className="text-sm text-zinc-500">กำลังโหลดข้อมูล รอสักครู่นะ...</p>
       </div>
     );
   }
@@ -334,7 +334,7 @@ export default function DashboardView() {
         {/* เงินสดย่อย */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-zinc-900">เงินสดย่อย</span>
+            <span className="text-sm font-bold text-zinc-900">💵 เงินสดย่อย</span>
             <span className={`rounded-full px-3 py-1 text-xs font-medium ${pettyCashTone.text} bg-zinc-50`}>
               {pettyCashTone.label}
             </span>
@@ -358,7 +358,7 @@ export default function DashboardView() {
         {/* เงินทดรองจ่าย */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-zinc-900">เงินทดรองจ่าย</span>
+            <span className="text-sm font-bold text-zinc-900">🧾 เงินทดรองจ่าย</span>
             <span className="text-xs font-medium text-zinc-400">{selectedMonth || "เดือนนี้"}</span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
@@ -409,11 +409,11 @@ export default function DashboardView() {
       {/* Category breakdown */}
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-400">แยกตามหมวดหมู่ (ตาม Odoo)</h2>
+          <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-400">📊 แยกตามหมวดหมู่ (ตาม Odoo)</h2>
           {monthSelect}
         </div>
         {categoryTotals.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">ไม่มีรายการในเดือนนี้</p>
+          <p className="mt-3 text-sm text-zinc-500">เดือนนี้ยังไม่มีค่าใช้จ่ายเลย 🌱</p>
         ) : (
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {categoryTotals.map(([category, total]) => (
@@ -466,9 +466,17 @@ export default function DashboardView() {
       {/* Data — card list on mobile, table from sm: up. Same filteredRows,
           two renderings so small screens never get the 720px-wide table. */}
       {filteredRows.length === 0 ? (
-        <p className="rounded-xl border border-zinc-200 bg-white px-4 py-6 text-center text-sm text-zinc-400 shadow-sm">
-          ไม่พบรายการ
-        </p>
+        <div className="rounded-xl border border-zinc-200 bg-white px-4 py-10 text-center shadow-sm">
+          <p className="text-3xl">🍃</p>
+          <p className="mt-2 text-sm font-medium text-zinc-600">
+            {statusFilter === "ยกเลิก" ? "ยังไม่มีรายการที่ยกเลิกเลย" : "ยังไม่มีรายการตรงนี้เลย"}
+          </p>
+          <p className="mt-1 text-xs text-zinc-400">
+            {categoryFilter || vendorSearch
+              ? "ลองเปลี่ยนตัวกรอง หรือล้างคำค้นดูนะ"
+              : "พอมีบิลเข้ามา จะขึ้นให้เห็นตรงนี้เลย"}
+          </p>
+        </div>
       ) : (
         <>
           {/* Mobile card list */}

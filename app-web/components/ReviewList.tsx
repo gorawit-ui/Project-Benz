@@ -92,7 +92,7 @@ export default function ReviewList() {
     try {
       const ok = await updateOne(id, status);
       if (!ok) throw new Error("อัปเดตสถานะไม่สำเร็จ");
-      if (status === "ตรวจแล้ว") showToast("อนุมัติสำเร็จ!");
+      if (status === "ตรวจแล้ว") showToast("อนุมัติเรียบร้อย! 🎉");
       await load(selectedMonth);
     } catch (err) {
       setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
@@ -127,7 +127,7 @@ export default function ReviewList() {
         setError(`อนุมัติไม่สำเร็จ ${failedCount} จาก ${ids.length} รายการ — ลองใหม่อีกครั้งสำหรับรายการที่เหลือ`);
       }
       if (failedCount < ids.length) {
-        showToast(`อนุมัติสำเร็จ! (${ids.length - failedCount} รายการ)`);
+        showToast(`อนุมัติเรียบร้อย ${ids.length - failedCount} รายการ! 🎉`);
       }
       setSelectedIds(new Set());
       await load(selectedMonth);
@@ -184,7 +184,7 @@ export default function ReviewList() {
       <div className="space-y-3">
         {toastElement}
         {monthSelect}
-        <p className="text-sm text-zinc-500">กำลังโหลด...</p>
+        <p className="text-sm text-zinc-500">กำลังโหลดข้อมูล รอสักครู่นะ...</p>
       </div>
     );
   }
@@ -196,7 +196,13 @@ export default function ReviewList() {
       <div className="space-y-3">
         {toastElement}
         {monthSelect}
-        <p className="text-sm text-zinc-500">ไม่มีรายการรอตรวจ</p>
+        {/* Nothing pending is good news — the old blank-looking line read
+            like an error rather than "you're done". */}
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-10 text-center">
+          <p className="text-3xl">🎉</p>
+          <p className="mt-2 text-sm font-semibold text-emerald-900">ตรวจครบทุกรายการแล้ว!</p>
+          <p className="mt-1 text-xs text-emerald-700">ไม่มีอะไรค้างรอตรวจเลย พักได้เลยนะ</p>
+        </div>
       </div>
     );
   }

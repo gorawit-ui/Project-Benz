@@ -138,7 +138,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       // partway through this document.
       setSelectedTemplate((prev) => (prev?.payeeName === payeeName ? null : prev));
       setConfirmDeleteName(null);
-      showToast("ลบข้อมูลผู้รับเงินแล้ว");
+      showToast("ลบชื่อออกจากรายการแล้ว 👌");
     } catch (err) {
       setTemplateNotice(err instanceof Error ? err.message : "ลบไม่สำเร็จ");
     } finally {
@@ -172,7 +172,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       const data = await res.json();
       setSelectedTemplate(data.template as PayeeTemplate);
       await loadTemplates();
-      showToast("บันทึกข้อมูลผู้รับเงินแล้ว");
+      showToast("บันทึกไว้แล้ว! ครั้งหน้าเลือกได้เลย 🙌");
     } catch (err) {
       setTemplateNotice(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
@@ -268,7 +268,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       if (uploadedLink) setDriveLink(uploadedLink);
       if (linkedId) setLinkedExpenseId(linkedId);
       if (uploadError) setDriveWarning(decodeURIComponent(uploadError));
-      showToast("สร้างเอกสารรับเงินเสร็จแล้ว");
+      showToast("สร้างเอกสารเสร็จแล้ว! 🎉");
     } catch (err) {
       setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
     } finally {
@@ -561,7 +561,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         <a
           href={downloadUrl}
           download={downloadFilename}
-          onClick={() => showToast("ดาวน์โหลดเอกสารรับเงินแล้ว")}
+          onClick={() => showToast("ดาวน์โหลดแล้ว 📄")}
           className="block w-full rounded-lg border border-emerald-700 px-4 py-3 text-center font-medium text-emerald-700 hover:bg-emerald-50"
         >
           ดาวน์โหลดเอกสารรับเงิน (.pdf)
