@@ -7,7 +7,13 @@ import { findDuplicateExpense } from "@/lib/duplicateCheck";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS, getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
 import ComboBox from "./ComboBox";
 
-const DOCUMENT_TYPES: DocumentType[] = ["ใบเสร็จรับเงิน", "ใบกำกับภาษี", "บิลเงินสด"];
+const DOCUMENT_TYPES: DocumentType[] = [
+  "ใบเสร็จรับเงิน",
+  "ใบกำกับภาษี",
+  "บิลเงินสด",
+  "บิลทางด่วน",
+  "สลิป Grab",
+];
 
 const VAT_RATE = 0.07;
 // Fallback only — the real threshold always comes from

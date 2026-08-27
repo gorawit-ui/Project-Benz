@@ -12,7 +12,18 @@ import { google, sheets_v4 } from "googleapis";
 import { isMonthTabName } from "./month";
 
 export type FundType = "เงินสดย่อย" | "เงินทดรองจ่าย";
-export type DocumentType = "ใบเสร็จรับเงิน" | "ใบกำกับภาษี" | "บิลเงินสด";
+/**
+ * ประเภทเอกสาร. The first three are accounting document types; the last two
+ * are evidence formats the team also submits — a toll slip and a Grab
+ * screenshot are not tax documents, but they are what actually exists for
+ * those expenses, and naming them lets OCR apply the right reading rules.
+ */
+export type DocumentType =
+  | "ใบเสร็จรับเงิน"
+  | "ใบกำกับภาษี"
+  | "บิลเงินสด"
+  | "บิลทางด่วน"
+  | "สลิป Grab";
 export type ExpenseStatus = "รอตรวจ" | "ตรวจแล้ว" | "นับเข้าระบบ" | "ต้องแก้ไข" | "ยกเลิก";
 // Only meaningful for fundType === "เงินทดรองจ่าย" (the employee paid out of
 // pocket and is owed a reimbursement) — ignored for "เงินสดย่อย" rows.
