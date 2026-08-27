@@ -36,6 +36,22 @@ function splitOption(option: string): { code: string | null; label: string } {
   return match ? { code: match[1], label: match[2] } : { code: null, label: option };
 }
 
+/**
+ * Splits a code like "EXP00000000025" into prefix / padding zeros /
+ * significant digits, so the padding can be dimmed and the digits that
+ * actually differ emphasised. The full code is still rendered — this is
+ * only weighting, not truncation, so it stays checkable against Odoo.
+ *
+ * This matters for correctness, not just polish: "ค่าธรรมเนียมขอใบอนุญาต"
+ * exists twice under EXP00000000007 and SER00000000003, and the code is the
+ * ONLY thing telling those two rows apart.
+ */
+function splitCode(code: string): { prefix: string; padding: string; digits: string } {
+  const match = /^([A-Za-z]*)(0*)(\d+)$/.exec(code);
+  if (!match) return { prefix: code, padding: "", digits: "" };
+  return { prefix: match[1], padding: match[2], digits: match[3] };
+}
+
 export default function ComboBox({
   value,
   onChange,
@@ -168,9 +184,17 @@ export default function ComboBox({
                     } ${selected ? "font-semibold text-emerald-800" : "text-zinc-700"}`}
                   >
                     <span className="min-w-0 flex-1 break-words">{label}</span>
-                    {code && (
-                      <span className="mt-0.5 shrink-0 font-mono text-[10px] leading-4 text-zinc-400">{code}</span>
-                    )}
+                    {code &&
+                      (() => {
+                        const { prefix, padding, digits } = splitCode(code);
+                        return (
+                          <span className="mt-px shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] leading-4 text-zinc-700">
+                            {prefix}
+                            <span className="text-zinc-400">{padding}</span>
+                            <span className="font-bold">{digits}</span>
+                          </span>
+                        );
+                      })()}
                   </button>
                 </li>
               );
