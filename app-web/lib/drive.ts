@@ -172,3 +172,6 @@ export async function downloadDriveFile(
     mimeType: meta.data.mimeType ?? "image/jpeg",
   };
 }
+
+// Re-exported so server-side callers keep a single import site.
+export { driveFileIdFromLink } from "./driveLinks";

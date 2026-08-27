@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ExpenseRow } from "@/lib/sheets";
+import ReceiptViewer from "./ReceiptViewer";
 
 export default function ReviewList() {
   const [rows, setRows] = useState<ExpenseRow[] | null>(null);
@@ -288,22 +289,17 @@ export default function ReviewList() {
               <dt className="text-zinc-400">หมวดหมู่ (ตาม Odoo)</dt>
               <dd className="text-zinc-700">{row.odooCategory}</dd>
             </div>
-            {row.receiptFileLink && (
-              <div>
-                <dt className="text-zinc-400">ไฟล์ใบเสร็จ</dt>
-                <dd>
-                  <a
-                    href={row.receiptFileLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-emerald-700 underline"
-                  >
-                    เปิดไฟล์
-                  </a>
-                </dd>
-              </div>
-            )}
           </dl>
+
+          {/* The receipt itself gets its own strip rather than a cell in the
+              grid above: it's the one thing the reviewer actually has to look
+              at before approving, and at 56px the thumbnail is big enough to
+              recognise the bill without opening anything. */}
+          {row.receiptFileLink && (
+            <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50/70 p-2.5">
+              <ReceiptViewer link={row.receiptFileLink} label="ใบเสร็จ" />
+            </div>
+          )}
 
           {/* Note field full-width above, both action buttons split evenly
               below — a growing input plus two buttons all on one row was

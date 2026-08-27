@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExpenseRow, ExpenseStatus } from "@/lib/sheets";
+import ReceiptViewer from "./ReceiptViewer";
 
 // Monthly petty-cash threshold, mirrored from the classification logic used
 // elsewhere in the app (see docs). Kept as a local constant rather than an
@@ -498,6 +499,12 @@ export default function DashboardView() {
 
                   {cancelled && row.note && (
                     <p className="mt-2 text-xs text-zinc-400">เหตุผลที่ยกเลิก: {row.note}</p>
+                  )}
+
+                  {row.receiptFileLink && (
+                    <div className="mt-3">
+                      <ReceiptViewer link={row.receiptFileLink} label="ใบเสร็จ" />
+                    </div>
                   )}
 
                   <div className="mt-3 flex items-center justify-between text-sm">
