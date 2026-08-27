@@ -7,14 +7,29 @@
  * that one was a wide dump of every pairing seen in the data, this one is
  * the curated set GM works from.
  *
- * Strings are kept BYTE-IDENTICAL to what the team supplied, including the
- * `[CODE] label` prefix and a few quirks carried over from Odoo itself
- * (trailing spaces on a few entries, a double space in "ค่าขยะมูลฝอย  Fac16",
- * a stray tone mark on "่ค่ากระดาษโน๊ต"). Please don't "tidy" these — the
- * value written to the Sheet should match Odoo exactly so accounting can key
- * it straight in. Note two categories share a label under different codes
- * ("ค่าธรรมเนียมขอใบอนุญาต" as EXP…007 and SER…003), which is why the code
- * prefix has to stay part of the value.
+ * The `[CODE]` prefix is the part that matters and must stay: it's what's
+ * bound to Odoo (`product.product.default_code` for categories,
+ * `account.account.code` for accounts) and what accounting pulls against.
+ * Two categories even share a label under different codes
+ * ("ค่าธรรมเนียมขอใบอนุญาต" as EXP…007 and SER…003), so the code is the only
+ * thing that disambiguates them.
+ *
+ * Strings are kept BYTE-IDENTICAL to Odoo, quirks included — trailing spaces
+ * on EXP…026 / EXP…039 / EXP…042, a double space in "ค่าขยะมูลฝอย  Fac16",
+ * a stray tone mark on "่ค่ากระดาษโน๊ต". All of these were verified to be
+ * Odoo's own stored values, not typos in transit, so please don't "tidy" them.
+ *
+ * VERIFIED against live Odoo (read-only, 2026-08-27): all 18 account codes
+ * and all 41 category codes exist and their labels match, except as noted:
+ *
+ *   - "สวัสดิการ" and "สำนักงาน-วัสดุสิ้นเปลือง" genuinely have NO code in
+ *     Odoo (default_code is unset on both) — not an omission here.
+ *   - EXP00000000004, EXP00000000007 and SER00000000020 exist with matching
+ *     labels but are ARCHIVED (active = false) in Odoo, so they can't be
+ *     picked on a new Odoo expense. Kept in the list because the team asked
+ *     for them; if they're still in use they need un-archiving in Odoo.
+ *   - [513006] is named "ค่าวัสดุสิ้นเปลืองใช้ไป - WH300" in Odoo; the label
+ *     kept here is the team's shorter name for it. The code is correct.
  *
  * Category and Acc name are picked INDEPENDENTLY and manually for now — the
  * logic for pairing them (and for auto-matching from a receipt's vendor
