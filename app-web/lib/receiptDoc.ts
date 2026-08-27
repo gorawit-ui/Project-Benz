@@ -54,6 +54,11 @@ const HEADER_NAME_SIZE = 13;
 const HEADER_SMALL_SIZE = 8;
 const BODY_SIZE = 9;
 const SECTION_HEAD_SIZE = 11;
+// The filled-in identity/amount fields (name, ID number, expense detail,
+// amount) read as the actual content of the document, so they're sized up
+// from BODY_SIZE for legibility — everything else (attachments list,
+// footer captions) stays at BODY_SIZE.
+const FIELD_SIZE = 12;
 
 const LOGO_PATH = path.join(process.cwd(), "assets", "tdfb-logo.jpg");
 let logoBuffer: Buffer | null = null;
@@ -139,12 +144,15 @@ function drawDashedBox(doc: PDFKit.PDFDocument, x: number, y: number, width: num
 }
 
 /**
- * Draws `text` wrapped within `width`, every line underlined — used for the
+ * Draws `text` wrapped within `width`; every wrapped line gets a underline
+ * spanning the FULL width, not just as long as that line's text — like a
+ * blank line on a paper form, so a short value still reaches the right edge
+ * of its slot instead of trailing off into empty space. Used for the
  * filled-in "รายละเอียด" block, which can be several OCR-extracted line
  * items (already \n-separated) or a single long line needing to wrap.
  * Returns the total height consumed.
  */
-function drawUnderlinedBlock(
+function drawFilledBlock(
   doc: PDFKit.PDFDocument,
   text: string,
   x: number,
@@ -153,11 +161,96 @@ function drawUnderlinedBlock(
   size = BODY_SIZE
 ): number {
   doc.font(FONT_REGULAR).fontSize(size).fillColor(INK);
+  const lineHeight = size * 1.35;
   const startY = doc.y;
-  doc.text(text, x, y, { width, underline: true, lineGap: 3 });
-  const consumed = doc.y - y;
+  doc.text(text, x, y, { width, lineGap: 3 });
+  const consumed = doc.y - y || lineHeight;
   doc.y = startY; // caller manages its own cursor
-  return consumed || size * 1.35;
+
+  const lineCount = Math.max(1, Math.round(consumed / lineHeight));
+  doc.save().strokeColor(INK).lineWidth(0.7);
+  for (let i = 0; i < lineCount; i++) {
+    const lineY = y + i * lineHeight + size + 2;
+    doc.moveTo(x, lineY).lineTo(x + width, lineY).stroke();
+  }
+  doc.restore();
+
+  return consumed;
+}
+
+/**
+ * Draws "label value" where the value sits in an underlined slot of a FIXED
+ * width (not just as wide as the value text) — a short value still fills
+ * its slot instead of leaving the rest of the row blank. Returns the total
+ * width consumed (label + slot), so callers can chain fields on one row.
+ */
+function drawFilledField(
+  doc: PDFKit.PDFDocument,
+  label: string,
+  value: string,
+  x: number,
+  y: number,
+  slotWidth: number,
+  size = BODY_SIZE
+): number {
+  doc.font(FONT_REGULAR).fontSize(size).fillColor(INK);
+  doc.text(label, x, y, { lineBreak: false });
+  const labelWidth = doc.widthOfString(label);
+  const valueX = x + labelWidth;
+  doc.text(value, valueX, y, { lineBreak: false });
+  const lineY = y + size + 2;
+  doc
+    .save()
+    .strokeColor(INK)
+    .lineWidth(0.7)
+    .moveTo(valueX, lineY)
+    .lineTo(x + labelWidth + slotWidth, lineY)
+    .stroke()
+    .restore();
+  return labelWidth + slotWidth;
+}
+
+/**
+ * Draws the "เป็นจำนวนเงิน [number] บาท ([spelled out])" line with a single
+ * underline running from right after the label all the way to the right
+ * margin (`x + width`), rather than one underline per run — so a small
+ * amount (short digits, short spelled-out text) still reaches the edge of
+ * the row instead of stopping right after the text. Returns the line height.
+ */
+function drawAmountLine(
+  doc: PDFKit.PDFDocument,
+  amountNumberText: string,
+  amountText: string,
+  x: number,
+  y: number,
+  width: number,
+  size = BODY_SIZE
+): number {
+  doc.font(FONT_REGULAR).fontSize(size).fillColor(INK);
+  const label = "เป็นจำนวนเงิน ";
+  doc.text(label, x, y, { lineBreak: false });
+  const labelWidth = doc.widthOfString(label);
+  const valueX = x + labelWidth;
+
+  doc.font(FONT_BOLD).fontSize(size);
+  doc.text(amountNumberText, valueX, y, { lineBreak: false });
+  const numberWidth = doc.widthOfString(amountNumberText);
+
+  doc.font(FONT_REGULAR).fontSize(size);
+  doc.text(` บาท (${amountText})`, valueX + numberWidth, y, { lineBreak: false });
+
+  const lineY = y + size + 2;
+  doc
+    .save()
+    .strokeColor(INK)
+    .lineWidth(0.7)
+    .moveTo(valueX, lineY)
+    .lineTo(x + width, lineY)
+    .stroke()
+    .restore();
+
+  doc.fillColor(INK);
+  return size * 1.35;
 }
 
 export interface GenerateReceiptDocInput {
@@ -269,43 +362,39 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
   doc.y += BODY_SIZE * 1.35 + 20;
 
   // ---- Body ----
-  doc.y += drawRuns(
-    doc,
-    [
-      r("ข้าพเจ้า "),
-      r(data.payeeName, { underline: true }),
-      r("     เลขประจำตัวประชาชน "),
-      r(data.idNumber, { underline: true }),
-    ],
-    MARGIN,
-    doc.y,
-    CONTENT_WIDTH,
-    "left"
-  ) + 12;
+  // Name and ID number each get their own full-width filled slot (not just
+  // as wide as the typed value), so a short value still reaches the right
+  // margin. Each is on its own line rather than sharing one row — payee
+  // names vary a lot in length, and a long one would otherwise run into the
+  // ID number field next to it.
+  {
+    doc.font(FONT_REGULAR).fontSize(FIELD_SIZE);
+    const nameLabel = "ข้าพเจ้า ";
+    const nameLabelWidth = doc.widthOfString(nameLabel);
+    const rowY1 = doc.y;
+    drawFilledField(doc, nameLabel, data.payeeName, MARGIN, rowY1, CONTENT_WIDTH - nameLabelWidth, FIELD_SIZE);
+    doc.y = rowY1 + FIELD_SIZE * 1.35 + 10;
+
+    doc.font(FONT_REGULAR).fontSize(FIELD_SIZE);
+    const idLabel = "เลขประจำตัวประชาชน ";
+    const idLabelWidth = doc.widthOfString(idLabel);
+    const rowY2 = doc.y;
+    drawFilledField(doc, idLabel, data.idNumber, MARGIN, rowY2, CONTENT_WIDTH - idLabelWidth, FIELD_SIZE);
+    doc.y = rowY2 + FIELD_SIZE * 1.35 + 14;
+  }
 
   drawRuns(
     doc,
-    [r("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า")],
+    [r("ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า", { size: FIELD_SIZE })],
     MARGIN,
     doc.y,
     CONTENT_WIDTH,
     "left"
   );
-  doc.y += BODY_SIZE * 1.35 + 4;
-  doc.y += drawUnderlinedBlock(doc, data.expenseDetail, MARGIN + 16, doc.y, CONTENT_WIDTH - 16) + 12;
+  doc.y += FIELD_SIZE * 1.35 + 4;
+  doc.y += drawFilledBlock(doc, data.expenseDetail, MARGIN + 16, doc.y, CONTENT_WIDTH - 16, FIELD_SIZE) + 12;
 
-  doc.y += drawRuns(
-    doc,
-    [
-      r("เป็นจำนวนเงิน "),
-      r(amountNumberText, { font: FONT_BOLD, underline: true }),
-      r(` บาท (${amountText})`, { underline: true }),
-    ],
-    MARGIN,
-    doc.y,
-    CONTENT_WIDTH,
-    "left"
-  ) + 22;
+  doc.y += drawAmountLine(doc, amountNumberText, amountText, MARGIN, doc.y, CONTENT_WIDTH, FIELD_SIZE) + 22;
 
   // ---- Attachments ----
   drawRuns(doc, [r("เอกสารแนบ", { font: FONT_BOLD, size: SECTION_HEAD_SIZE })], MARGIN, doc.y, CONTENT_WIDTH, "left");
