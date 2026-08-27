@@ -435,10 +435,17 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
   // rather than a separate indented block below — with the filled-in part
   // underlined all the way to the right margin on every line, same as the
   // other filled-in fields.
+  //
+  // The label already ends in "เป็นค่า" — OCR-extracted details commonly
+  // start with "ค่า..." too (e.g. "ค่าเดินทางและค่าจอดรถ"), which read as
+  // "เป็นค่า ค่าเดินทาง..." if left as-is. Strip one leading "ค่า" so the
+  // sentence doesn't repeat it; only the very start, so "ค่าจอดรถ" later in
+  // the same string is untouched.
+  const expenseDetailForSentence = data.expenseDetail.replace(/^ค่า\s*/, "");
   doc.y += drawFilledParagraph(
     doc,
     "ได้รับเงินจาก บริษัท ทีดี ฟู้ดแอนด์เบเวอร์เรจ จำกัด เป็นค่า ",
-    data.expenseDetail,
+    expenseDetailForSentence,
     MARGIN,
     doc.y,
     CONTENT_WIDTH,
