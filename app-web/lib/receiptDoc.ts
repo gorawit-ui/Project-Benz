@@ -362,23 +362,24 @@ export async function generateReceiptDoc(data: GenerateReceiptDocInput): Promise
     // real room to sign by hand once this is printed, not just a cramped line.
     BODY_SIZE * 1.35;
 
-  // "ลงชื่อ" sits at the left edge of its column (not centered) — printing
-  // this out, the actual signature gets written into the space the line
-  // stretches across to the right, which a centered short line wouldn't
-  // leave enough room for.
+  // The "ลงชื่อ ____" block (label + line) is centered as a unit within the
+  // column, same as the "(name)" line below it — a fixed-length line still
+  // leaves real room to sign, it just no longer sits flush against the
+  // left edge looking disconnected from the rest of the block.
   const SIGN_LABEL = "ลงชื่อ ";
   const SIGN_LINE_LENGTH = 150;
   doc.font(FONT_REGULAR).fontSize(BODY_SIZE).fillColor(INK);
   const signLabelWidth = doc.widthOfString(SIGN_LABEL);
-  doc.text(SIGN_LABEL, signX, signY, { lineBreak: false });
+  const signBlockWidth = signLabelWidth + SIGN_LINE_LENGTH;
+  const signBlockX = signX + (SIGN_COL_WIDTH - signBlockWidth) / 2;
+  doc.text(SIGN_LABEL, signBlockX, signY, { lineBreak: false });
   const signLineY = signY + BODY_SIZE + 2;
-  const signLineEndX = Math.min(signX + signLabelWidth + SIGN_LINE_LENGTH, signX + SIGN_COL_WIDTH - 10);
   doc
     .save()
     .strokeColor(INK)
     .lineWidth(0.7)
-    .moveTo(signX + signLabelWidth, signLineY)
-    .lineTo(signLineEndX, signLineY)
+    .moveTo(signBlockX + signLabelWidth, signLineY)
+    .lineTo(signBlockX + signBlockWidth, signLineY)
     .stroke()
     .restore();
 
