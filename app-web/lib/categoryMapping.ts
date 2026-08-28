@@ -107,18 +107,82 @@ export const ACC_NAME_OPTIONS: string[] = [
 ];
 
 /**
- * Category -> default acc name pairing. Intentionally EMPTY: which account
- * each category should post to is part of the matching logic still being
- * designed, so for now the two fields are chosen independently by hand.
- * Filling this in is all it takes to switch the auto-fill back on — the form
- * already calls getAccNameForCategory() on every category change.
+ * Category -> default acc name pairing.
+ *
+ * Sourced from real Odoo usage (hr.expense, read-only, 2026-08-28), not
+ * guessed from labels: aggregated by product_id (category) x account_id
+ * (acc name) for every expense tagged `x_studio_owner = "Pop Napat"` — the
+ * only owner with real history, since HR has no department history of its
+ * own yet in Odoo (see SUMMARY.md §5 for the full methodology and counts).
+ *
+ * This covers the 31 categories where the majority account Pop Napat
+ * actually used is already in ACC_NAME_OPTIONS above. 12 categories are
+ * deliberately left OUT for now:
+ *   - EXP00000000053 (ค่าเงินมัดจำ/เงินประกันงาน) — only 1 data point, and
+ *     the account it happened to use (141002 ส่วนปรับปรุงอาคารเช่า) doesn't
+ *     semantically fit a security deposit. Too thin to trust.
+ *   - The other 11 (EXP007, SER003, EXP023, EXP031, SER018, EXP042,
+ *     EXP048, EXP037, SER002, SER022, SER030) — real usage points to an
+ *     account that isn't in ACC_NAME_OPTIONS yet (e.g. เบิกเงินสดย่อย really
+ *     posts to the petty-cash GL account 111150, not any of the 18 listed
+ *     here), or collides with an existing account under the exact same
+ *     Thai label but a different code (532007 vs 513013, 535001 vs
+ *     535000). Picking the wrong one would silently mismatch what
+ *     accounting keys into Odoo, so these wait on a decision from the
+ *     product owner (pending a conversation with Pop) rather than a guess.
+ *     Full detail in SUMMARY.md §5, group B.
+ *
+ * Filling in the remaining 12 later is a pure addition to this array —
+ * getAccNameForCategory() and the form already handle it with no other
+ * code changes.
  */
 export interface CategoryAccPair {
   category: string;
   accName: string;
 }
 
-export const CATEGORY_ACC_PAIRS: CategoryAccPair[] = [];
+export const CATEGORY_ACC_PAIRS: CategoryAccPair[] = [
+  { category: "[EXP00000000004] เครื่องมือเครื่องใช้", accName: "[513006] ค่าวัสดุสิ้นเปลืองใช้ไป" },
+  {
+    category: "[EXP00000000025] ค่าใช้จ่ายในการเดินทาง (ค่าน้ำมัน,ทางด่วน,จอดรถ)",
+    accName: "[531007] ค่าเดินทางยานพาหนะ",
+  },
+  { category: "[EXP00000000026] ค่าขนมพนักงาน Factory/WH-300/Exp Cafe ", accName: "[531008] ค่าสวัสดิการพนักงาน" },
+  { category: "[EXP00000000029] ค่าชุดตรวจโควิด/ชุดตรวจกัญชา", accName: "[531008] ค่าสวัสดิการพนักงาน" },
+  { category: "[EXP00000000030] ค่าอาหาร", accName: "[531008] ค่าสวัสดิการพนักงาน" },
+  { category: "[EXP00000000032] ค่ากระดาษA4 +อุปกรณ์เครื่องเขียน", accName: "[532005] เครื่องเขียนแบบพิมพ์" },
+  { category: "[EXP00000000033] ่ค่ากระดาษโน๊ต ปากกา ไวท์บอร์ด", accName: "[532005] เครื่องเขียนแบบพิมพ์" },
+  { category: "[EXP00000000034] ค่าหมึก HP 955XL M", accName: "[532005] เครื่องเขียนแบบพิมพ์" },
+  {
+    category: "[EXP00000000035] ค่าอุปกรณ์ทำความสะอาด ทิชชู ถุงขยะ",
+    accName: "[532006] ค่าวัสดุของใช้สิ้นเปลือง-สนง.",
+  },
+  { category: "[EXP00000000036] ค่าน้ำยาทำความสะอาดพื้น", accName: "[532006] ค่าวัสดุของใช้สิ้นเปลือง-สนง." },
+  { category: "[EXP00000000038] ค่าล้างแอร์ WH300", accName: "[532009] ค่าบริการงานทั่วไป" },
+  { category: "[EXP00000000039] ค่าแม่บ้าน Factory/WH-300/Exp Cafe ", accName: "[532009] ค่าบริการงานทั่วไป" },
+  { category: "[EXP00000000040] ค่าติดตั้งเครื่องมือเครื่องใช้อุปกรณ์ต่าง", accName: "[532009] ค่าบริการงานทั่วไป" },
+  {
+    category: "[EXP00000000041] ค่าโทรศัพท์ Bria Mobile Call center บริษัท",
+    accName: "[533003] ค่าโทรศัพท์&อินเตอร์เน็ต",
+  },
+  { category: "[EXP00000000043] ค่าภาษีป้าย TDFB Factory", accName: "[536004] ค่าธรรมเนียมอื่น" },
+  { category: "[EXP00000000044] ค่าคัดหนังสือรับรอง/ฟอร์มต่าง", accName: "[536004] ค่าธรรมเนียมอื่น" },
+  { category: "[EXP00000000045] ค่าขยะมูลฝอย  Fac16", accName: "[536004] ค่าธรรมเนียมอื่น" },
+  { category: "[EXP00000000046] ค่าเลี้ยงรับรอง", accName: "[537003] ค่ารับรอง/เลี้ยงลูกค้า/ของขวัญ" },
+  { category: "[EXP00000000047] ค่าซื้อของขวัญ", accName: "[537003] ค่ารับรอง/เลี้ยงลูกค้า/ของขวัญ" },
+  { category: "[EXP00000000058] ค่าใช้จ่าย Outing", accName: "[531008] ค่าสวัสดิการพนักงาน" },
+  { category: "[SER00000000019] ค่าสัมมนา/ฝึกอบรม/หนังสือ", accName: "[532004] ค่าสัมมนา/ฝึกอบรม/หนังสือ" },
+  { category: "[SER00000000020] ค่าเครื่องเขียนแบบพิมพ์", accName: "[532005] เครื่องเขียนแบบพิมพ์" },
+  { category: "[SER00000000023] ค่าบริการงานทั่วไป", accName: "[532009] ค่าบริการงานทั่วไป" },
+  { category: "[SER00000000025] ค่าจ้างแม่บ้าน", accName: "[532009] ค่าบริการงานทั่วไป" },
+  { category: "[SER00000000027] ค่าไฟฟ้า", accName: "[533001] ค่าไฟฟ้า" },
+  { category: "[SER00000000028] ค่าน้ำประปา", accName: "[533002] ค่าน้ำประปา" },
+  { category: "[SER00000000029] ค่าโทรศัพท์&อินเตอร์เน็ต", accName: "[533003] ค่าโทรศัพท์&อินเตอร์เน็ต" },
+  { category: "[SER00000000032] ค่าธรรมเนียมอื่น", accName: "[536004] ค่าธรรมเนียมอื่น" },
+  { category: "[SER00000000033] ค่ารับรอง/เลี้ยงลูกค้า/ของขวัญ", accName: "[537003] ค่ารับรอง/เลี้ยงลูกค้า/ของขวัญ" },
+  { category: "สวัสดิการ", accName: "[531008] ค่าสวัสดิการพนักงาน" },
+  { category: "สำนักงาน-วัสดุสิ้นเปลือง", accName: "[532006] ค่าวัสดุของใช้สิ้นเปลือง-สนง." },
+];
 
 /** Looks up the default acc name for a category; undefined until pairs are defined. */
 export function getAccNameForCategory(category: string): string | undefined {

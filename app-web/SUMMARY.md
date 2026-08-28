@@ -347,9 +347,11 @@ async function findRowNumberById(sheets, sheetId, tabName, rowId) {
 
 ---
 
-## 5. Proposed Category → Account Mapping (draft — ยังไม่ได้ขึ้นระบบ)
+## 5. Category → Account Mapping — สถานะล่าสุด
 
-**สถานะ: ร่างเพื่อรีวิว ยังไม่ได้แก้ `lib/categoryMapping.ts`** — `CATEGORY_ACC_PAIRS` ในโค้ดยังว่างเปล่าเหมือนเดิม รอตรวจตารางนี้ก่อน แล้วค่อยเอาไปเติมในโค้ดทีหลัง
+**อัปเดต:** กลุ่ม A (31 คู่) **ขึ้นระบบแล้ว** — เติมเข้า `CATEGORY_ACC_PAIRS` ใน `lib/categoryMapping.ts` จริง มีเทสต์คุม (`lib/__tests__/categoryMapping.test.ts`) กันไม่ให้พิมพ์ผิด/ใช้บัญชีที่ไม่อยู่ในลิสต์ 18 บัญชี
+
+**เหลือ 12 หมวดหมู่ที่ยังไม่ auto-fill** (11 จากกลุ่ม B + `EXP00000000053` ที่ข้อมูลมีแค่ 1 รายการและไม่เข้าท่าเชิงความหมาย) — รอคุยกับป๊อปแล้วอัปเดตทีหลัง รายละเอียดเดิมด้านล่างนี้ยังใช้อ้างอิงได้ครบ
 
 ### วิธีได้มา
 
