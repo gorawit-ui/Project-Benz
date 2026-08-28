@@ -16,6 +16,7 @@
  */
 import { GoogleGenAI, Type } from "@google/genai";
 import type { DocumentType } from "./sheets";
+import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS } from "./categoryMapping";
 
 export type OcrConfidence = "high" | "medium" | "low";
 
@@ -29,6 +30,15 @@ export interface ExtractedReceiptData {
   amountBeforeVat?: number;
   vatAmount?: number;
   grandTotal?: number;
+  // Gemini's own best guess at หมวดหมู่/Acc name from the vendor name +
+  // expense detail it just read (constrained to CATEGORY_OPTIONS /
+  // ACC_NAME_OPTIONS below via `enum`, so it can only pick a real Odoo value,
+  // never invent one). This is a starting point for the user to review, not
+  // a verified classification — ExpenseForm shows a "please check this"
+  // note whenever it's applied, and clears it the moment either field is
+  // touched by hand.
+  suggestedCategory?: string;
+  suggestedAccName?: string;
   confidence?: OcrConfidence;
 }
 
@@ -90,6 +100,8 @@ const PROMPT = `คุณกำลังอ่านเอกสารใบเ�
 
 8. confidence — ประเมินความมั่นใจของตัวเองว่าอ่านเอกสารนี้ได้ชัดเจนแค่ไหน: "high" ถ้าเอกสารชัดเจน อ่านครบทุกฟิลด์หลักได้มั่นใจ, "medium" ถ้าพออ่านได้แต่มีบางจุดไม่แน่ใจ, "low" ถ้าภาพเบลอ ไม่ชัด ถูกครอบตัด แสงไม่พอ หรืออ่านได้ไม่ครบ
 
+9. suggestedCategory / suggestedAccName — จากชื่อผู้ขาย (supplierName) และรายละเอียดค่าใช้จ่าย (expenseDetail) ที่อ่านได้จากข้อ 4-5 ให้ช่วยแนะนำหมวดหมู่ (suggestedCategory) และชื่อบัญชี (suggestedAccName) ที่น่าจะตรงกับรายการนี้มากที่สุด **โดยเลือกจากรายการที่กำหนดไว้ใน enum เท่านั้น ห้ามคิดค่าขึ้นมาเองเด็ดขาด แม้จะสะกดหรือความหมายใกล้เคียงแค่ไหนก็ตาม** ถ้าไม่มีตัวเลือกไหนที่ตรงกับลักษณะรายการอย่างชัดเจนจริงๆ ให้เว้นทั้งสองฟิลด์นี้ไว้ (อย่าเดาแบบขอไปที) เพราะนี่เป็นแค่คำแนะนำเบื้องต้นให้ผู้ใช้ตรวจสอบต่อเอง ไม่ใช่การจัดหมวดหมู่ที่ยืนยันแล้ว
+
 ตอบกลับเป็น JSON ตาม schema เท่านั้น`;
 
 const RESPONSE_SCHEMA = {
@@ -125,6 +137,20 @@ const RESPONSE_SCHEMA = {
       description: "VAT 7% — เว้นว่างถ้าเอกสารไม่มีสัญญาณว่าเกี่ยวข้องกับ VAT เลย",
     },
     grandTotal: { type: Type.NUMBER, nullable: true, description: "ยอดรวม (Grand Total)" },
+    suggestedCategory: {
+      type: Type.STRING,
+      enum: CATEGORY_OPTIONS,
+      nullable: true,
+      description:
+        "หมวดหมู่ (ตาม Odoo) ที่แนะนำจากชื่อผู้ขาย/รายละเอียดค่าใช้จ่าย — คำแนะนำเบื้องต้นเท่านั้น เว้นว่างถ้าไม่มั่นใจ",
+    },
+    suggestedAccName: {
+      type: Type.STRING,
+      enum: ACC_NAME_OPTIONS,
+      nullable: true,
+      description:
+        "ชื่อบัญชี (Acc name) ที่แนะนำจากชื่อผู้ขาย/รายละเอียดค่าใช้จ่าย — คำแนะนำเบื้องต้นเท่านั้น เว้นว่างถ้าไม่มั่นใจ",
+    },
     confidence: {
       type: Type.STRING,
       enum: CONFIDENCE_LEVELS,
@@ -161,6 +187,18 @@ function asOptionalConfidence(value: unknown): OcrConfidence | undefined {
     : undefined;
 }
 
+// `enum` in RESPONSE_SCHEMA already constrains what Gemini can return, but
+// sanitize() re-checks against the same live lists rather than trusting the
+// model's JSON blindly — belt and suspenders, and it stays correct even if
+// CATEGORY_OPTIONS/ACC_NAME_OPTIONS change without the schema being rebuilt.
+function asOptionalCategory(value: unknown): string | undefined {
+  return typeof value === "string" && CATEGORY_OPTIONS.includes(value) ? value : undefined;
+}
+
+function asOptionalAccName(value: unknown): string | undefined {
+  return typeof value === "string" && ACC_NAME_OPTIONS.includes(value) ? value : undefined;
+}
+
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function asOptionalIsoDate(value: unknown): string | undefined {
@@ -174,7 +212,7 @@ function asOptionalIsoDate(value: unknown): string | undefined {
  * dropping anything that doesn't match the expected shape rather than
  * trusting the model's JSON blindly.
  */
-function sanitize(raw: unknown): ExtractedReceiptData {
+export function sanitize(raw: unknown): ExtractedReceiptData {
   if (!raw || typeof raw !== "object") return {};
   const obj = raw as Record<string, unknown>;
   const result: ExtractedReceiptData = {
@@ -187,6 +225,8 @@ function sanitize(raw: unknown): ExtractedReceiptData {
     amountBeforeVat: asOptionalNumber(obj.amountBeforeVat),
     vatAmount: asOptionalNumber(obj.vatAmount),
     grandTotal: asOptionalNumber(obj.grandTotal),
+    suggestedCategory: asOptionalCategory(obj.suggestedCategory),
+    suggestedAccName: asOptionalAccName(obj.suggestedAccName),
     confidence: asOptionalConfidence(obj.confidence),
   };
   // Strip undefined keys so callers can rely on `"field" in result` /

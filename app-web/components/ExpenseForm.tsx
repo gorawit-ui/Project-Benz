@@ -136,6 +136,14 @@ export default function ExpenseForm({
     null
   );
 
+  // True right after OCR fills หมวดหมู่/Acc name from Gemini's own guess
+  // (data.suggestedCategory/suggestedAccName — see lib/ocr.ts), so the form
+  // can nudge the user to double-check it. Same touched-flag shape as
+  // fundTypeTouched above: flips false the instant the user actually
+  // interacts with either field, so the reminder never lingers over a value
+  // they've already reviewed.
+  const [categorySuggestedByAi, setCategorySuggestedByAi] = useState(false);
+
   // Duplicate-bill detection (see lib/duplicateCheck.ts) — set only when
   // handleSubmit finds a match; submission is held until the user explicitly
   // confirms or cancels via the warning box below.
@@ -220,18 +228,27 @@ export default function ExpenseForm({
     if (data.billDate) patch.billDate = data.billDate;
     if (data.documentNumber) patch.documentNumber = data.documentNumber;
 
-    // หมวดหมู่ + Acc name auto-match off the vendor name / expense detail
-    // OCR just read (see lib/categoryMapping.ts) — a receipt with no
-    // confident keyword match is left blank for the user to pick manually
-    // rather than guessing.
+    // หมวดหมู่ + Acc name auto-fill off the vendor name / expense detail OCR
+    // just read (see lib/categoryMapping.ts). A curated keyword rule (once
+    // CATEGORY_RULES has any) wins first since it's a vetted, deterministic
+    // pairing; otherwise fall back to Gemini's own suggestedCategory/
+    // suggestedAccName from the same OCR call. Either way this is a
+    // best-guess starting point — categorySuggestedByAi below drives a
+    // "please check this" note so it's never treated as already confirmed.
     const vendorForMatch = data.supplierNameTh || data.supplierNameEn || "";
+    let suggestedByAi = false;
     if (vendorForMatch || data.expenseDetail) {
       const match = matchCategoryAndAccName(vendorForMatch, data.expenseDetail || "");
       if (match) {
         patch.odooCategory = match.category;
         patch.accName = match.accName;
+      } else if (data.suggestedCategory || data.suggestedAccName) {
+        if (data.suggestedCategory) patch.odooCategory = data.suggestedCategory;
+        if (data.suggestedAccName) patch.accName = data.suggestedAccName;
+        suggestedByAi = true;
       }
     }
+    if (suggestedByAi) setCategorySuggestedByAi(true);
 
     const hasBeforeVat = data.amountBeforeVat !== undefined;
     const hasVat = data.vatAmount !== undefined;
@@ -302,6 +319,7 @@ export default function ExpenseForm({
 
   function handleFileSelected(file: File | null) {
     setReceiptFile(file);
+    setCategorySuggestedByAi(false);
     if (file) {
       void runOcr(file);
     } else {
@@ -361,6 +379,7 @@ export default function ExpenseForm({
       setDuplicateMatch(null);
       setFundTypeTouched(false);
       setPettyCashContext(null);
+      setCategorySuggestedByAi(false);
     } catch (err) {
       setMessage({
         type: "error",
@@ -555,6 +574,7 @@ export default function ExpenseForm({
             value={form.odooCategory}
             onChange={(value) => {
               set("odooCategory", value);
+              setCategorySuggestedByAi(false); // the user is reviewing it now, however briefly
               // Category and acc name always pair together — picking a
               // known category (from the dropdown, or auto-matched) fills
               // in its acc name too; accName still stays freely editable.
@@ -575,11 +595,20 @@ export default function ExpenseForm({
             className={inputClass}
             options={ACC_NAME_OPTIONS}
             value={form.accName}
-            onChange={(value) => set("accName", value)}
+            onChange={(value) => {
+              set("accName", value);
+              setCategorySuggestedByAi(false);
+            }}
             placeholder="พิมพ์เพื่อค้นหา เช่น สวัสดิการ, ไฟฟ้า"
           />
         </div>
       </div>
+
+      {categorySuggestedByAi && (
+        <p className="-mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+          🤖 หมวดหมู่และชื่อบัญชีนี้ระบบแนะนำให้อัตโนมัติจากใบเสร็จ ลองเช็กอีกครั้งให้ชัวร์ก่อนบันทึกนะ
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>

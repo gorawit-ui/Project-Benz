@@ -63,6 +63,7 @@ const response = await ai.models.generateContent({
 6. **เลขที่เอกสาร**
 7. ฟิลด์ไหนอ่านไม่ออกจริงๆ **ห้ามเดาหรือสมมติค่า** ให้เว้นว่างไว้
 8. **confidence** — ให้โมเดลประเมินความมั่นใจตัวเอง (`high` / `medium` / `low`) — ถ้า `low` ฝั่งฟอร์มจะเตือนผู้ใช้ให้ตรวจสอบซ้ำก่อนบันทึก
+9. **suggestedCategory / suggestedAccName** — ให้ Gemini แนะนำหมวดหมู่ + Acc name เองจากชื่อผู้ขายและรายละเอียดค่าใช้จ่ายที่เพิ่งอ่านได้ (ข้อ 4-5) **แต่ต้องเลือกจาก `CATEGORY_OPTIONS`/`ACC_NAME_OPTIONS` เท่านั้น** — สองฟิลด์นี้ผูก `enum` ไว้ใน `responseSchema` ตรงๆ (คนละกลไกกับฟิลด์อื่นที่เป็น free text) ทำให้โมเดลไม่มีทางตอบค่าที่ไม่มีจริงใน Odoo ได้เลย ถ้าไม่มั่นใจว่าเข้าหมวดไหนชัดเจนให้เว้นว่างไว้เหมือนกฎข้อ 7 (ดูรายละเอียดเต็มใน §2 ชั้น C)
 
 ### Reliability
 
@@ -72,11 +73,11 @@ const response = await ai.models.generateContent({
 
 ## 2. Category / Account Mapping
 
-**สถานะปัจจุบัน: Rule-based (keyword matching) แต่ตาราง mapping ยังว่างเปล่า — logic การจับคู่อัตโนมัติยังไม่ทำงานจริง รอออกแบบเพิ่มเติม**
+**สถานะปัจจุบัน:** สามชั้นทำงานร่วมกัน — (1) ตัวเลือกในดรอปดาวน์ (มีข้อมูลจริงจาก Odoo แล้ว), (2) การจับคู่ default acc name หลังผู้ใช้เลือก category เอง (ใช้งานจริง 31 คู่ ดู §5), (3) คำแนะนำสดจาก Gemini ตอน OCR อ่านบิล (ใช้งานจริง — ดูชั้น C ด้านล่าง) ทั้งสามชั้นเป็นแค่ตัวช่วย ผู้ใช้แก้ไขเองได้เสมอทั้งสองช่อง
 
-**ไฟล์:** `lib/categoryMapping.ts`
+**ไฟล์:** `lib/categoryMapping.ts` (ชั้น A/B), `lib/ocr.ts` (ชั้น C)
 
-โครงสร้างแบ่งเป็น 2 ชั้นแยกจากกันชัดเจน:
+โครงสร้างแบ่งเป็น 3 ชั้นแยกจากกันชัดเจน:
 
 ### ชั้น A — ตัวเลือกในดรอปดาวน์ (มีข้อมูลจริงแล้ว ตรวจสอบกับ Odoo แล้ว)
 
@@ -157,17 +158,27 @@ export const ACC_NAME_OPTIONS: string[] = [
 
 > **หมายเหตุ:** ค่า string ทั้งหมดเก็บ **byte-identical กับ Odoo** รวมถึงจุดที่ดูเหมือนพิมพ์ผิด (เว้นวรรคท้ายบางรายการ, เว้นวรรคคู่ใน "ค่าขยะมูลฝอย  Fac16", ไม้เอกเกินใน "่ค่ากระดาษโน๊ต") — ยืนยันแล้วว่าเป็นค่าที่เก็บใน Odoo จริงแบบนั้น ไม่ใช่พิมพ์เพี้ยนตอนก็อปมา **ห้ามแก้ไขให้ "ดูสะอาด" เพราะจะไม่ตรงกับ Odoo อีกต่อไป**
 
-### ชั้น B — Logic การจับคู่อัตโนมัติ (rule-based, ว่างเปล่า รอออกแบบ)
+### ชั้น B — Default acc name ต่อ category (ใช้งานจริง 31 คู่) + keyword rules (ยังว่าง)
 
 ```ts
-// Category -> default acc name (สำหรับ auto-fill เวลาเลือก category)
-export const CATEGORY_ACC_PAIRS: CategoryAccPair[] = [];  // ← ว่าง
+// Category -> default acc name — ใช้ตอนผู้ใช้เลือก category เอง (มือ หรือ
+// ชั้น C เติมให้) จะ auto-fill accName คู่กันทันที มี 31 คู่จริงแล้ว ที่มาและ
+// รายการที่เหลือ (12 หมวดหมู่ยังรอ) ดู §5
+export const CATEGORY_ACC_PAIRS: CategoryAccPair[] = [
+  { category: "[EXP00000000004] เครื่องมือเครื่องใช้", accName: "[513006] ค่าวัสดุสิ้นเปลืองใช้ไป" },
+  // ...อีก 30 คู่ ดูโค้ดเต็มใน lib/categoryMapping.ts
+];
 
-// Keyword matching: ชื่อร้าน/รายละเอียด -> category + accName
+export function getAccNameForCategory(category: string): string | undefined {
+  return CATEGORY_ACC_PAIRS.find((p) => p.category === category)?.accName;
+}
+
+// Keyword matching: ชื่อร้าน/รายละเอียด -> category + accName โดยตรง (คนละ
+// กลไกกับชั้น C ด้านล่าง — นี่คือ rule ที่เขียนดักคำไว้ล่วงหน้าแบบตายตัว)
 export const CATEGORY_RULES: CategoryRule[] = [
   // { keywords: ["เซเว่น", "7-eleven"], category: "[EXP00000000030] ค่าอาหาร",
   //   accName: "[531008] ค่าสวัสดิการพนักงาน" },
-];  // ← ว่าง (ตัวอย่างที่ comment ไว้คือ template ไม่ใช่ rule จริง)
+];  // ← ยังว่าง (ตัวอย่างที่ comment ไว้คือ template ไม่ใช่ rule จริง)
 
 // วิธีจับคู่: substring match, case-insensitive, กฎแรกที่ตรง = ชนะ
 export function matchCategoryAndAccName(vendorName, description) {
@@ -181,9 +192,32 @@ export function matchCategoryAndAccName(vendorName, description) {
 }
 ```
 
-**เพราะ `CATEGORY_RULES` ว่าง → `matchCategoryAndAccName` คืนค่า `null` เสมอตอนนี้** หลัง OCR อ่านบิลเสร็จ ช่องหมวดหมู่/บัญชีจะว่างให้ผู้ใช้เลือกเองทุกครั้ง ยังไม่มีการเดาอัตโนมัติเกิดขึ้นจริงในโปรดักชัน
+**เพราะ `CATEGORY_RULES` ยังว่าง → `matchCategoryAndAccName` คืนค่า `null` เสมอ** ช่องนี้จึงยังไม่ใช่ตัวที่เติมหมวดหมู่ให้อัตโนมัติหลัง OCR ในทางปฏิบัติ (หน้าที่นั้นตอนนี้เป็นของชั้น C ด้านล่าง) — ถ้าจะเปิดใช้ก็แค่เติมข้อมูลลง `CATEGORY_RULES`, โค้ดฝั่งฟอร์มเรียกไว้พร้อมแล้ว และจะถูกเช็คก่อนชั้น C เสมอ (rule ที่เขียนดักไว้เอง = แม่นกว่า ให้ชนะก่อน)
 
-**วิธีเปิดใช้งาน:** เติมข้อมูลลง `CATEGORY_ACC_PAIRS` และ/หรือ `CATEGORY_RULES` เท่านั้น — โค้ดฝั่งฟอร์ม (`ExpenseForm.tsx`) เรียก `getAccNameForCategory()` และ `matchCategoryAndAccName()` ไว้พร้อมแล้ว ไม่ต้องแก้โค้ดที่อื่น
+### ชั้น C — Gemini แนะนำเองสดๆ ตอนอ่านบิล (ใช้งานจริง)
+
+**ไฟล์:** `lib/ocr.ts`
+
+แทนที่จะรอเขียน keyword rule ไว้ล่วงหน้าทีละร้าน (ชั้น B) ให้ Gemini เดาหมวดหมู่ + Acc name เองเลยจากชื่อผู้ขาย/รายละเอียดที่มันเพิ่งอ่านได้จากใบเสร็จใบเดียวกัน — วิธีบังคับไม่ให้มันเดาค่าที่ไม่มีจริงคือผูก `enum` ตรงเข้ากับ `responseSchema` (เหมือนที่ `documentType`/`confidence` ทำอยู่แล้ว):
+
+```ts
+suggestedCategory: {
+  type: Type.STRING,
+  enum: CATEGORY_OPTIONS,   // มีแค่ 43 ค่านี้ให้เลือก เดาค่านอกลิสต์ไม่ได้
+  nullable: true,
+},
+suggestedAccName: {
+  type: Type.STRING,
+  enum: ACC_NAME_OPTIONS,   // มีแค่ 18 ค่านี้ให้เลือก
+  nullable: true,
+},
+```
+
+`sanitize()` เช็คซ้ำอีกชั้นฝั่งโค้ด (ไม่เชื่อ enum ของ schema เพียงอย่างเดียว) — ค่าไหนไม่ตรงกับ `CATEGORY_OPTIONS`/`ACC_NAME_OPTIONS` จริงๆ ตอนนั้นจะถูกตัดทิ้งเงียบๆ ไม่ใช่ error
+
+**ลำดับความสำคัญตอน apply เข้าฟอร์ม** (`ExpenseForm.tsx` → `applyExtractedData`): เช็ค `matchCategoryAndAccName` (ชั้น B, keyword rule) ก่อน — ถ้าไม่เจอ ค่อย fallback ไปใช้ `suggestedCategory`/`suggestedAccName` ที่ Gemini ส่งมา (ชั้น C)
+
+**Safety net ฝั่ง UI:** ทุกครั้งที่ชั้น C เติมค่าให้ ฟอร์มจะโชว์ข้อความเตือนเล็กๆ ใต้ช่องหมวดหมู่/Acc name — "🤖 หมวดหมู่และชื่อบัญชีนี้ระบบแนะนำให้อัตโนมัติจากใบเสร็จ ลองเช็กอีกครั้งให้ชัวร์ก่อนบันทึกนะ" — ข้อความนี้หายไปทันทีที่ผู้ใช้แตะช่องใดช่องหนึ่ง (พิมพ์เองหรือเลือกจากดรอปดาวน์ ถือว่าตรวจสอบแล้ว) ตัวแปรควบคุมคือ `categorySuggestedByAi` ใน `ExpenseForm.tsx` (โครงเดียวกับ `fundTypeTouched` ที่มีอยู่แล้วสำหรับประเภทเงิน)
 
 ---
 
@@ -330,8 +364,10 @@ async function findRowNumberById(sheets, sheetId, tabName, rowId) {
 | `money.test.ts` | ยอดเงินสดย่อย, การตัดประเภทเงินที่ขอบวงเงิน, การยกเลิกคืนเงิน, บิลซ้ำ, แท็บเดือน, เลขบาทเป็นคำอ่าน (22 เคส) |
 | `payeeTemplates.test.ts` | การอ้างอิงแถวชีตของรายชื่อผู้รับเงินที่บันทึกไว้ ไม่ให้สลับแถวกันเวลามีแถวว่างคั่น (5 เคส) |
 | `thaiId.test.ts` | การจัดกลุ่มเลขบัตรประชาชน (3 เคส) |
+| `categoryMapping.test.ts` | `CATEGORY_ACC_PAIRS` ต้องอ้างอิงแต่ค่าที่มีจริงใน `CATEGORY_OPTIONS`/`ACC_NAME_OPTIONS` เท่านั้น กันพิมพ์ผิด/ใช้บัญชีที่ไม่อยู่ในลิสต์ (7 เคส) |
+| `ocr.test.ts` | `sanitize()` ต้องตัดทิ้ง `suggestedCategory`/`suggestedAccName` ที่ไม่ตรงกับลิสต์จริง แม้ `enum` ฝั่ง schema จะหลุดมา (4 เคส) |
 
-รวม 30 เคส รันด้วย `npx vitest run`
+รวม 41 เคส รันด้วย `npx vitest run`
 
 ### อื่นๆ
 
