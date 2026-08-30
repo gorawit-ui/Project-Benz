@@ -9,6 +9,7 @@
 import { useState } from "react";
 import CaptureStep from "./CaptureStep";
 import ExpenseForm from "./ExpenseForm";
+import { ActionButton, PageShell } from "./ui";
 
 export default function CaptureFlow({ recordedByName }: { recordedByName: string }) {
   const [step, setStep] = useState<"capture" | "form">("capture");
@@ -30,24 +31,26 @@ export default function CaptureFlow({ recordedByName }: { recordedByName: string
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
-      <button
+    <PageShell>
+      <ActionButton
+        variant="ghost"
         type="button"
         onClick={() => {
           setInitialFile(null);
           setStep("capture");
         }}
-        className="mb-3 text-sm font-medium text-zinc-500 transition-colors hover:text-emerald-700"
+        className="-ml-3 mb-3"
       >
         ← ถ่ายรูปใหม่ / เริ่มใหม่
-      </button>
-      <h1 className="text-xl font-bold text-emerald-900">บันทึกค่าใช้จ่าย</h1>
-      <p className="mt-1 text-sm text-zinc-500">
+      </ActionButton>
+      <p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--brand)]">Expense entry</p>
+      <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--ink)]">บันทึกค่าใช้จ่าย</h1>
+      <p className="mt-1.5 text-sm leading-6 text-[var(--muted)]">
         ตรวจสอบข้อมูลที่อ่านได้ (หรือกรอกเอง) แล้วบันทึกเข้าสถานะ &ldquo;รอตรวจ&rdquo;
       </p>
-      <div className="mt-6">
+      <div className="mt-5">
         <ExpenseForm recordedByName={recordedByName} initialFile={initialFile} />
       </div>
-    </div>
+    </PageShell>
   );
 }

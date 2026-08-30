@@ -8,6 +8,7 @@
  * component owns capture only, not any OCR/form logic.
  */
 import { useRef } from "react";
+import { ActionButton, PageShell, Surface } from "./ui";
 
 export default function CaptureStep({
   onFileSelected,
@@ -26,18 +27,21 @@ export default function CaptureStep({
   }
 
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center px-4 py-12 text-center">
-      <h1 className="text-xl font-bold text-emerald-900">แนบใบเสร็จ</h1>
-      <p className="mt-2 text-sm text-zinc-500">
+    <PageShell className="max-w-lg">
+      <div className="mb-6 pt-2 text-center sm:pt-6">
+      <p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--brand)]">New expense</p>
+      <h1 className="mt-2 text-2xl font-bold tracking-tight text-[var(--ink)]">เริ่มจากใบเสร็จ</h1>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[var(--muted)]">
         ถ่ายรูปหรือแนบไฟล์ใบเสร็จ ระบบจะอ่านและเติมข้อมูลในฟอร์มให้อัตโนมัติ
       </p>
-      <p className="mt-1 text-xs text-zinc-400">รองรับ: ใบเสร็จรับเงิน, ใบกำกับภาษี, สลิปโอนเงิน (jpeg, png, pdf)</p>
+      </div>
 
-      <div className="mt-8 flex w-full flex-col gap-3">
-        <button
+      <Surface className="p-4 sm:p-5">
+      <div className="flex w-full flex-col gap-3">
+        <ActionButton
           type="button"
           onClick={() => cameraInputRef.current?.click()}
-          className="flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-4 text-base font-semibold text-white transition-all duration-150 hover:bg-emerald-800 active:scale-[0.98] active:bg-emerald-900"
+          className="min-h-14 text-base"
         >
           <svg
             width="20"
@@ -53,12 +57,13 @@ export default function CaptureStep({
             <circle cx="12" cy="13" r="3.6" />
           </svg>
           ถ่ายรูปใบเสร็จ
-        </button>
+        </ActionButton>
 
-        <button
+        <ActionButton
+          variant="secondary"
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-zinc-300 bg-white px-4 py-4 text-base font-semibold text-zinc-700 transition-all duration-150 hover:bg-zinc-50 active:scale-[0.98] active:bg-zinc-100"
+          className="min-h-14 border-dashed text-base"
         >
           <svg
             width="20"
@@ -76,7 +81,7 @@ export default function CaptureStep({
             <circle cx="9.5" cy="10.5" r="1" />
           </svg>
           แนบไฟล์
-        </button>
+        </ActionButton>
 
         {/* Rear-camera-first on mobile: accept + capture opens the camera directly. */}
         <input
@@ -97,13 +102,17 @@ export default function CaptureStep({
         />
       </div>
 
-      <button
+      <p className="mt-4 text-center text-xs leading-5 text-[var(--muted)]">รองรับ JPEG, PNG และ PDF · รูปจะใช้เพื่ออ่านข้อมูลและแนบกับรายการนี้</p>
+      </Surface>
+
+      <ActionButton
+        variant="ghost"
         type="button"
         onClick={onSkip}
-        className="mt-6 text-sm font-medium text-zinc-500 underline decoration-zinc-300 underline-offset-4 transition-colors hover:text-emerald-700"
+        className="mx-auto mt-4 flex"
       >
         กรอกข้อมูลเอง (ไม่มีรูป)
-      </button>
-    </div>
+      </ActionButton>
+    </PageShell>
   );
 }
