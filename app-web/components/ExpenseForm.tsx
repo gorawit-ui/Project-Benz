@@ -621,7 +621,7 @@ export default function ExpenseForm({
       </div>
 
       {categorySuggestedByAi && (
-        <p className="-mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+        <p className="mt-4 w-full rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
           🤖 หมวดหมู่และชื่อบัญชีนี้ระบบแนะนำให้อัตโนมัติจากใบเสร็จ ลองเช็กอีกครั้งให้ชัวร์ก่อนบันทึกนะ
         </p>
       )}

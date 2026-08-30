@@ -72,32 +72,37 @@ export default function NavBar() {
           )}
         </div>
 
-        <div className="mt-2 flex items-center justify-between gap-2 border-t border-[var(--line)] pt-2">
-          <nav aria-label="เมนูหลัก" className="-mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none]">
-            {LINKS.map((link) => {
-              const active = pathname === link.href;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 ${
-                    active
-                      ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
-                      : "text-[var(--muted)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink)]"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              );
-            })}
-          </nav>
+        <div className="mt-2 flex items-center gap-3 border-t border-[var(--line)] pt-2">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <nav
+              aria-label="เมนูหลัก"
+              className="flex w-full gap-1 overflow-x-auto pb-0.5 pr-3 [scrollbar-width:none]"
+            >
+              {LINKS.map((link) => {
+                const active = pathname === link.href;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 active:scale-95 ${
+                      active
+                        ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
+                        : "text-[var(--muted)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink)]"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
           <div className="flex shrink-0 items-center gap-2 text-sm text-[var(--muted)]">
             <span className="hidden max-w-[9rem] truncate md:inline">{session.user?.name ?? session.user?.email}</span>
             <ActionButton
               variant="secondary"
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="min-h-9 px-3 py-1.5 text-xs"
+              className="px-3 py-1.5 text-xs"
             >
               ออกจากระบบ
             </ActionButton>
