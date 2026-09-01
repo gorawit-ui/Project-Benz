@@ -388,9 +388,8 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
     {ocrCompletedCount < entries.length && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-5 backdrop-blur-sm" role="status" aria-live="polite">
         <div className="w-full max-w-sm rounded-2xl border border-white/70 bg-white p-6 text-center shadow-2xl">
-          <BilliMascot mood="scan" size="md" className="mx-auto" />
-          <h2 className="mt-4 text-lg font-bold text-[var(--ink)]">กำลังอ่านเอกสาร</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">อ่านแล้ว {ocrCompletedCount} จาก {entries.length} ใบ</p>
+          <BilliMascot mood="scan" size="lg" speech="กำลังอ่านเอกสาร" className="mx-auto" />
+          <p className="mt-2 text-sm text-[var(--muted)]">อ่านแล้ว {ocrCompletedCount} จาก {entries.length} ใบ</p>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-emerald-100" role="progressbar" aria-valuemin={0} aria-valuemax={entries.length} aria-valuenow={ocrCompletedCount}>
             <div className="h-full rounded-full bg-emerald-700 transition-all duration-500" style={{ width: `${(ocrCompletedCount / entries.length) * 100}%` }} />
           </div>
