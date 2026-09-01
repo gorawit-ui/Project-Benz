@@ -14,14 +14,25 @@ import {
 import { findDuplicateExpense } from "@/lib/duplicateCheck";
 import { monthLabelForBillDate } from "@/lib/month";
 
-const REQUIRED_FIELDS = ["fundType", "documentType", "documentNumber", "billDate", "supplierNameTh", "expenseDetail", "odooCategory", "amountBeforeVat", "vatAmount", "grandTotal", "receiptFileLink"] as const;
+const REQUIRED_FIELDS = ["fundType", "documentType", "documentNumber", "billDate", "supplierNameTh", "expenseDetail", "odooCategory", "grandTotal", "receiptFileLink"] as const;
 
 type BatchItem = Record<(typeof REQUIRED_FIELDS)[number], unknown> & {
   poNumber?: string;
   supplierNameEn?: string;
   costCenter?: string;
   accName?: string;
+  amountBeforeVat?: unknown;
+  vatAmount?: unknown;
+  hasVat?: boolean;
 };
+
+function normaliseTaxAmounts(item: BatchItem) {
+  const grandTotal = Number(item.grandTotal);
+  const hasVat = item.hasVat !== false;
+  const amountBeforeVat = hasVat ? Number(item.amountBeforeVat) : grandTotal;
+  const vatAmount = hasVat ? Number(item.vatAmount) : 0;
+  return { amountBeforeVat, vatAmount, grandTotal };
+}
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -49,7 +60,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "ข้อมูลไม่ครบ: " + field }, { status: 400 });
       }
     }
-    if (![item.amountBeforeVat, item.vatAmount, item.grandTotal].every((value) => Number.isFinite(Number(value)))) {
+    const amounts = normaliseTaxAmounts(item);
+    if (![amounts.amountBeforeVat, amounts.vatAmount, amounts.grandTotal].every(Number.isFinite) || amounts.grandTotal <= 0) {
       return NextResponse.json({ error: "จำนวนเงินไม่ถูกต้อง" }, { status: 400 });
     }
   }
@@ -61,6 +73,7 @@ export async function POST(req: NextRequest) {
     const reviewer = session.user.name ?? session.user.email ?? "";
 
     for (const item of body.items) {
+      const amounts = normaliseTaxAmounts(item);
       const tabName = monthLabelForBillDate(String(item.billDate));
       if (!existingByMonth.has(tabName)) {
         await ensureMonthTabExists(session.accessToken, team.sheetId, tabName);
@@ -70,7 +83,7 @@ export async function POST(req: NextRequest) {
       const previous = existingByMonth.get(tabName) ?? [];
       const duplicate = findDuplicateExpense(previous, {
         supplierNameTh: String(item.supplierNameTh),
-        grandTotal: Number(item.grandTotal),
+        grandTotal: amounts.grandTotal,
         billDate: String(item.billDate),
       });
       if (duplicate) {
@@ -94,9 +107,9 @@ export async function POST(req: NextRequest) {
         odooCategory: String(item.odooCategory),
         costCenter: item.costCenter ? String(item.costCenter) : team.costCenter ?? "",
         accName: item.accName ? String(item.accName) : "",
-        amountBeforeVat: Number(item.amountBeforeVat),
-        vatAmount: Number(item.vatAmount),
-        grandTotal: Number(item.grandTotal),
+        amountBeforeVat: amounts.amountBeforeVat,
+        vatAmount: amounts.vatAmount,
+        grandTotal: amounts.grandTotal,
         receiptFileLink: String(item.receiptFileLink),
         receiptDocLink: "",
         duplicateWarning: "",
