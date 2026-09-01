@@ -1,8 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fafaf9;
-  --foreground: #18181b;
+  /* Calm Financial Operations: warm paper, dependable green, quiet borders. */
+  --background: #f6f7f4;
+  --foreground: #18201d;
+  --surface: #ffffff;
+  --surface-subtle: #f2f5f1;
+  --ink: #18201d;
+  --muted: #66706b;
+  --line: #dfe5e1;
+  --line-strong: #c9d2cc;
+  --brand: #176b52;
+  --brand-strong: #105440;
+  --brand-soft: #e7f2ed;
+  --shadow-card: 0 1px 2px rgb(19 48 38 / 5%), 0 10px 28px rgb(19 48 38 / 5%);
 }
 
 @theme inline {
@@ -15,6 +26,10 @@ body {
   color: var(--foreground);
   /* Font is set via next/font (Prompt) on <body> in app/layout.tsx. */
 }
+
+::selection { background: var(--brand-soft); color: var(--brand-strong); }
+
+input, select, textarea { accent-color: var(--brand); }
 
 @layer base {
   /*

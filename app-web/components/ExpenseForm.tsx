@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import type { DocumentType, ExpenseRow, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { findDuplicateExpense } from "@/lib/duplicateCheck";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS, getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
 import ComboBox from "./ComboBox";
+import { ActionButton, SectionHeading } from "./ui";
+import SuccessDialog from "./SuccessDialog";
 
 const DOCUMENT_TYPES: DocumentType[] = [
   "ใบเสร็จรับเงิน",
@@ -117,6 +120,7 @@ export default function ExpenseForm({
   /** Pre-selected from the capture step (CaptureFlow) — OCR runs on it automatically once, on mount. */
   initialFile?: File | null;
 }) {
+  const router = useRouter();
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   // A draft recovered from a previous session, offered rather than applied —
   // see the DRAFT_KEY block below.
@@ -124,6 +128,7 @@ export default function ExpenseForm({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrMessage, setOcrMessage] = useState<OcrMessage | null>(null);
 
@@ -152,6 +157,16 @@ export default function ExpenseForm({
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const receiptPreviewUrl = useMemo(
+    () => (receiptFile?.type.startsWith("image/") ? URL.createObjectURL(receiptFile) : null),
+    [receiptFile]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
+    };
+  }, [receiptPreviewUrl]);
 
   // A file picked on the capture step (CaptureFlow) arrives here already
   // selected — kick off OCR for it once, the same way handleFileSelected
@@ -366,6 +381,7 @@ export default function ExpenseForm({
       }
 
       setMessage({ type: "success", text: "บันทึกรายการเรียบร้อยแล้ว 🎉 ส่งเข้ารอตรวจให้เลย" });
+      setShowSuccessDialog(true);
       // Only now is the draft safe to drop — a failed submit above keeps it.
       try {
         window.localStorage.removeItem(DRAFT_KEY);
@@ -469,12 +485,15 @@ export default function ExpenseForm({
   }, [form]);
 
   const inputClass =
-    "mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600";
-  const labelClass = "block text-sm font-medium text-zinc-700";
+    "mt-1.5 min-h-11 w-full rounded-xl border border-[var(--line-strong)] bg-white px-3 py-2.5 text-sm text-[var(--ink)] outline-none transition placeholder:text-zinc-400 focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-soft)]";
+  const labelClass = "block text-sm font-medium text-[var(--ink)]";
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-      <p className="text-xs text-zinc-400">บันทึกโดย {recordedByName} 👋</p>
+    <form onSubmit={handleSubmit} className="space-y-7 rounded-2xl border border-[var(--line)] bg-white p-4 shadow-[var(--shadow-card)] sm:p-7">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] pb-4">
+        <p className="text-sm font-medium text-[var(--ink)]">ตรวจข้อมูลทีละส่วน</p>
+        <p className="text-xs text-[var(--muted)]">บันทึกโดย {recordedByName}</p>
+      </div>
 
       {/* Unsent work from a previous visit. Restoring is the user's call —
           applying it automatically could clobber a form already in progress. */}
@@ -516,6 +535,8 @@ export default function ExpenseForm({
         </div>
       )}
 
+      <section>
+        <SectionHeading number="1" title="ประเภทและหมวดหมู่" description="ระบบอาจเติมส่วนนี้จากใบเสร็จ กรุณาตรวจสอบก่อนบันทึก" />
       <div>
         <label className={labelClass}>ประเภทเงิน</label>
         <div className="mt-1 flex gap-2">
@@ -605,11 +626,15 @@ export default function ExpenseForm({
       </div>
 
       {categorySuggestedByAi && (
-        <p className="-mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+        <p className="mt-4 w-full rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
           🤖 หมวดหมู่และชื่อบัญชีนี้ระบบแนะนำให้อัตโนมัติจากใบเสร็จ ลองเช็กอีกครั้งให้ชัวร์ก่อนบันทึกนะ
         </p>
       )}
 
+      </section>
+
+      <section className="border-t border-[var(--line)] pt-6">
+      <SectionHeading number="2" title="ข้อมูลผู้ขายและเอกสาร" description="กรอกข้อมูลสำคัญบนใบเสร็จให้ครบ" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className={labelClass}>ชื่อซัพพลายเออร์ (ไทย)</label>
@@ -668,6 +693,10 @@ export default function ExpenseForm({
         </div>
       </div>
 
+      </section>
+
+      <section className="border-t border-[var(--line)] pt-6">
+      <SectionHeading number="3" title="ยอดค่าใช้จ่าย" description="ยอดก่อน VAT จะคำนวณ VAT และยอดรวมให้อัตโนมัติเหมือนเดิม" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
           <label className={labelClass}>จำนวนเงินก่อน VAT</label>
@@ -704,17 +733,20 @@ export default function ExpenseForm({
         </div>
       </div>
 
-      <div>
+      </section>
+
+      <section className="border-t border-[var(--line)] pt-6">
+        <SectionHeading number="4" title="ใบเสร็จ" description="ถ่ายใหม่หรือเปลี่ยนไฟล์ได้ ข้อมูลที่กรอกไว้จะไม่หาย" />
         <label className={labelClass}>รูปถ่ายใบเสร็จ</label>
         <p className="mt-1 text-xs text-zinc-500">
           ถ่ายรูปหรือแนบไฟล์ใบเสร็จ ระบบจะอ่านและเติมข้อมูลในฟอร์มให้อัตโนมัติ (ตรวจสอบและแก้ไขได้ก่อนบันทึก)
         </p>
 
         <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-          <button
+          <ActionButton
             type="button"
             onClick={() => cameraInputRef.current?.click()}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-emerald-800 active:scale-[0.98] active:bg-emerald-900"
+            className="flex-1"
           >
             <svg
               width="18"
@@ -730,12 +762,13 @@ export default function ExpenseForm({
               <circle cx="12" cy="13" r="3.6" />
             </svg>
             ถ่ายรูปใบเสร็จ
-          </button>
+          </ActionButton>
 
-          <button
+          <ActionButton
+            variant="secondary"
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl border-[1.5px] border-dashed border-zinc-300 bg-white px-4 py-3.5 text-sm font-semibold text-zinc-700 transition-all duration-150 hover:bg-zinc-50 active:scale-[0.98] active:bg-zinc-100"
+            className="flex-1 border-dashed"
           >
             <svg
               width="18"
@@ -753,7 +786,7 @@ export default function ExpenseForm({
               <circle cx="9.5" cy="10.5" r="1" />
             </svg>
             แนบไฟล์
-          </button>
+          </ActionButton>
         </div>
 
         {/* Rear-camera-first on mobile: accept + capture opens the camera directly. */}
@@ -774,19 +807,19 @@ export default function ExpenseForm({
           onChange={(e) => handleFileSelected(e.target.files?.[0] ?? null)}
         />
 
-        {receiptFile && !ocrLoading && (
-          <p className="mt-2 truncate text-xs text-zinc-500">ไฟล์ที่แนบ: {receiptFile.name}</p>
-        )}
-
-        {ocrLoading && receiptFile && (
-          <div className="mt-3 flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-            <div className="h-10 w-8 flex-shrink-0 rounded border border-zinc-200 bg-white" />
+        {receiptFile && (
+          <div className="mt-3 flex items-center gap-3 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] p-3">
+            {receiptPreviewUrl ? (
+              // A local blob preview is intentionally not optimized by next/image.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={receiptPreviewUrl} alt="ตัวอย่างใบเสร็จที่แนบ" className="h-20 w-16 shrink-0 rounded-lg border border-[var(--line)] bg-white object-cover" />
+            ) : (
+              <div className="flex h-20 w-16 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-white text-xs font-bold text-[var(--brand)]">PDF</div>
+            )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-zinc-700">{receiptFile.name}</p>
-              <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-200">
-                <div className="h-full w-2/3 animate-pulse rounded-full bg-emerald-600" />
-              </div>
-              <p className="mt-1 text-xs text-zinc-500">กำลังอ่านข้อมูลด้วย OCR...</p>
+              <p className="truncate text-sm font-medium text-[var(--ink)]">{receiptFile.name}</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">{ocrLoading ? "กำลังอ่านข้อมูลด้วย OCR..." : "พร้อมแนบกับรายการ"}</p>
+              {ocrLoading && <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--line)]"><div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--brand)]" /></div>}
             </div>
           </div>
         )}
@@ -804,7 +837,7 @@ export default function ExpenseForm({
             {ocrMessage.text}
           </p>
         )}
-      </div>
+      </section>
 
       {message && (
         <p
@@ -845,13 +878,22 @@ export default function ExpenseForm({
       )}
 
       {!duplicateMatch && (
-        <button
+        <ActionButton
           type="submit"
           disabled={submitting || checkingDuplicate}
-          className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-medium text-white transition-all duration-150 hover:bg-emerald-800 active:scale-[0.98] active:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+          className="sticky bottom-3 z-20 w-full shadow-lg shadow-emerald-950/10 sm:static sm:shadow-none"
         >
           {submitting ? "กำลังบันทึก..." : checkingDuplicate ? "กำลังตรวจสอบรายการซ้ำ..." : "บันทึกรายการ (รอตรวจ)"}
-        </button>
+        </ActionButton>
+      )}
+
+      {showSuccessDialog && (
+        <SuccessDialog
+          detail="บันทึกรายการลง Google Sheet แล้ว และส่งเข้ารอตรวจเรียบร้อย"
+          primaryLabel="ไปที่ Dashboard"
+          onPrimary={() => router.push("/dashboard")}
+          onClose={() => setShowSuccessDialog(false)}
+        />
       )}
     </form>
   );

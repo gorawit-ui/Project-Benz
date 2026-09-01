@@ -18,8 +18,10 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadFilename, setDownloadFilename] = useState<string>("เอกสารรับเงิน.pdf");
   const [driveLink, setDriveLink] = useState<string | null>(null);
+  const [bundleLink, setBundleLink] = useState<string | null>(null);
   const [linkedExpenseId, setLinkedExpenseId] = useState<string | null>(null);
   const [driveWarning, setDriveWarning] = useState<string | null>(null);
+  const [bundleWarning, setBundleWarning] = useState<string | null>(null);
 
   // A brief, self-dismissing center-screen toast (e.g. "สร้างเอกสารรับเงินเสร็จแล้ว",
   // "ดาวน์โหลดเอกสารรับเงินแล้ว") — `visible` drives the fade in/out transition,
@@ -187,7 +189,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       .then((data) => {
         if (cancelled) return;
         const rows = (data.rows ?? []) as ExpenseRow[];
-        setPendingRows(rows.filter((row) => row.status === "รอตรวจ"));
+        setPendingRows(rows.filter((row) => row.documentType === "บิลเงินสด" && !row.receiptDocLink));
         setPendingRowsMonth((data.month as string | undefined) ?? null);
       })
       .catch(() => {
@@ -226,8 +228,10 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
     setError(null);
     setDownloadUrl(null);
     setDriveLink(null);
+    setBundleLink(null);
     setLinkedExpenseId(null);
     setDriveWarning(null);
+    setBundleWarning(null);
     setSubmitting(true);
 
     try {
@@ -261,6 +265,8 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       const linkedId = res.headers.get("X-Linked-Expense-Id");
       const compactDocDate = res.headers.get("X-Doc-Date-Compact") ?? "";
       const uploadError = res.headers.get("X-Drive-Upload-Error");
+      const evidenceBundleLink = res.headers.get("X-Cash-Bill-Bundle-Link");
+      const evidenceBundleError = res.headers.get("X-Cash-Bill-Bundle-Error");
 
       const blob = await res.blob();
       setDownloadUrl(URL.createObjectURL(blob));
@@ -268,6 +274,8 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       if (uploadedLink) setDriveLink(uploadedLink);
       if (linkedId) setLinkedExpenseId(linkedId);
       if (uploadError) setDriveWarning(decodeURIComponent(uploadError));
+      if (evidenceBundleLink) setBundleLink(evidenceBundleLink);
+      if (evidenceBundleError) setBundleWarning(decodeURIComponent(evidenceBundleError));
       showToast("สร้างเอกสารเสร็จแล้ว! 🎉");
     } catch (err) {
       setError(err instanceof Error ? err.message : "อุ๊ปส์ มีบางอย่างไม่เรียบร้อย 😅 ลองใหม่อีกทีนะ");
@@ -532,7 +540,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
       </div>
 
       <div>
-        <label className={labelClass}>ผูกกับรายการค่าใช้จ่าย (ถ้ามี)</label>
+        <label className={labelClass}>ผูกกับบิลเงินสด (ถ้ามี)</label>
         <select className={inputClass} value={expenseRowId} onChange={(e) => setExpenseRowId(e.target.value)}>
           <option value="">ไม่ผูกกับรายการใด</option>
           {pendingRows.map((row) => (
@@ -543,7 +551,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
           ))}
         </select>
         <p className="mt-1 text-xs text-zinc-500">
-          เมื่อเลือก ระบบจะบันทึกลิงก์เอกสารรับเงินนี้กลับเข้าไปในรายการที่เลือกโดยอัตโนมัติ
+          เมื่อเลือก ระบบจะบันทึกลิงก์เอกสารรับเงินกลับเข้าไปในรายการ และ copy ทั้งบิลเงินสดกับเอกสารรับเงินไว้ในโฟลเดอร์รวมของรายการนั้น
         </p>
       </div>
 
@@ -602,9 +610,26 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         </div>
       )}
 
+      {bundleLink && (
+        <div className="rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-900">
+          <p>
+            จัดชุดบิลเงินสดและเอกสารรับเงินไว้แล้ว —{" "}
+            <a href={bundleLink} target="_blank" rel="noopener noreferrer" className="underline">
+              เปิดโฟลเดอร์รวม
+            </a>
+          </p>
+        </div>
+      )}
+
       {driveWarning && (
         <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
           <p>ดาวน์โหลดเอกสารสำเร็จ แต่อัปโหลดเข้า Drive ไม่สำเร็จ ({driveWarning})</p>
+        </div>
+      )}
+
+      {bundleWarning && (
+        <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p>สร้างเอกสารและบันทึกลิงก์แล้ว แต่จัดชุดไฟล์ไม่สำเร็จ ({bundleWarning})</p>
         </div>
       )}
     </form>

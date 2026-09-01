@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
+import { ActionButton } from "./ui";
 
 const LINKS = [
   { href: "/", label: "บันทึกค่าใช้จ่าย" },
@@ -49,55 +50,62 @@ export default function NavBar() {
   if (!session) return null;
 
   return (
-    <header className="border-b border-zinc-200 bg-white">
+    <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-white/95 backdrop-blur">
       {/* Split into rows (brand+clock / nav links / user+logout) rather than
           one big flex-wrap of everything — on a phone, wrapping was mixing
           nav links in with the brand and team badge with no clear grouping.
           Each row still wraps on its own if it has to. */}
-      <div className="mx-auto max-w-4xl px-4 py-3">
+      <div className="mx-auto max-w-4xl px-4 py-2.5 sm:px-6 sm:py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1">
-            <span className="mr-1 font-semibold text-emerald-800">TDFB Expense</span>
+            <span className="mr-1 font-bold tracking-tight text-[var(--brand-strong)]">TDFB Expense</span>
             {session.team && (
-              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+              <span className="rounded-full bg-[var(--brand-soft)] px-2.5 py-0.5 text-xs font-medium text-[var(--brand)]">
                 {session.team.name}
               </span>
             )}
           </div>
           {now && (
-            <span className="text-xs text-zinc-400">
+            <span className="hidden text-xs text-[var(--muted)] sm:inline">
               {greetingFor(now)} · {now.toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
             </span>
           )}
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 pt-2">
-          <div className="flex flex-wrap items-center gap-1">
-            {LINKS.map((link) => {
-              const active = pathname === link.href;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-150 active:scale-95 ${
-                    active
-                      ? "bg-emerald-100 text-emerald-800"
-                      : "text-zinc-600 hover:bg-emerald-50 hover:text-emerald-800 active:bg-emerald-100"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              );
-            })}
+        <div className="mt-2 flex items-center gap-3 border-t border-[var(--line)] pt-2">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <nav
+              aria-label="เมนูหลัก"
+              className="flex w-full gap-1 overflow-x-auto pb-0.5 pr-3 [scrollbar-width:none]"
+            >
+              {LINKS.map((link) => {
+                const active = pathname === link.href;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 active:scale-95 ${
+                      active
+                        ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
+                        : "text-[var(--muted)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink)]"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
-          <div className="flex items-center gap-3 text-sm text-zinc-600">
-            <span className="max-w-[9rem] truncate sm:max-w-none">{session.user?.name ?? session.user?.email}</span>
-            <button
+          <div className="flex shrink-0 items-center gap-2 text-sm text-[var(--muted)]">
+            <span className="hidden max-w-[9rem] truncate md:inline">{session.user?.name ?? session.user?.email}</span>
+            <ActionButton
+              variant="secondary"
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="flex-shrink-0 rounded-md border border-zinc-300 px-3 py-1.5 text-zinc-700 transition-all duration-150 hover:bg-zinc-100 active:scale-95 active:bg-zinc-200"
+              className="px-3 py-1.5 text-xs"
             >
               ออกจากระบบ
-            </button>
+            </ActionButton>
           </div>
         </div>
       </div>
