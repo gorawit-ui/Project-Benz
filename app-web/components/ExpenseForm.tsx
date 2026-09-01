@@ -64,6 +64,8 @@ interface FormState {
   amountBeforeVat: string;
   vatAmount: string;
   grandTotal: string;
+  /** False when a receipt only has a net/grand total and no VAT signal. */
+  hasVat: boolean;
 }
 
 /**
@@ -108,6 +110,7 @@ const INITIAL_STATE: FormState = {
   amountBeforeVat: "",
   vatAmount: "",
   grandTotal: "",
+  hasVat: true,
 };
 
 type OcrMessage = { type: "success" | "warning" | "error"; text: string };
@@ -198,6 +201,22 @@ export default function ExpenseForm({
     }
   }
 
+  function handleGrandTotalChange(value: string) {
+    setForm((prev) => (
+      prev.hasVat
+        ? { ...prev, grandTotal: value }
+        : { ...prev, amountBeforeVat: value, vatAmount: "0", grandTotal: value }
+    ));
+  }
+
+  function setVatEnabled(hasVat: boolean) {
+    setForm((prev) => {
+      if (hasVat) return { ...prev, hasVat: true };
+      const total = prev.grandTotal || prev.amountBeforeVat;
+      return { ...prev, hasVat: false, amountBeforeVat: total, vatAmount: "0", grandTotal: total };
+    });
+  }
+
   /**
    * Calls /api/expenses/petty-cash-status for the given billDate's month,
    * updates the context note next to the fund-type toggle, and — unless the
@@ -279,6 +298,18 @@ export default function ExpenseForm({
       // vatAmount/grandTotal derive from it exactly like manual entry does.
       handleAmountBeforeVatChange(String(data.amountBeforeVat));
       effectiveGrandTotal = round2(data.amountBeforeVat! + round2(data.amountBeforeVat! * VAT_RATE));
+    } else if (hasTotal && !hasBeforeVat && !hasVat) {
+      // A total-only receipt is not proof of VAT. Keep the UI in its
+      // one-amount mode and normalize the hidden Sheet values safely.
+      setForm((prev) => ({
+        ...prev,
+        ...patch,
+        hasVat: false,
+        amountBeforeVat: String(data.grandTotal),
+        vatAmount: "0",
+        grandTotal: String(data.grandTotal),
+      }));
+      effectiveGrandTotal = data.grandTotal;
     } else if (hasBeforeVat || hasVat || hasTotal) {
       // OCR read at least two of the three amounts itself — trust its own
       // read rather than overwriting it with the auto-calc.
@@ -287,6 +318,7 @@ export default function ExpenseForm({
         ...(hasBeforeVat ? { amountBeforeVat: String(data.amountBeforeVat) } : {}),
         ...(hasVat ? { vatAmount: String(data.vatAmount) } : {}),
         ...(hasTotal ? { grandTotal: String(data.grandTotal) } : {}),
+        hasVat: hasBeforeVat || hasVat,
       }));
       effectiveGrandTotal = hasTotal ? data.grandTotal : undefined;
     }
@@ -367,8 +399,8 @@ export default function ExpenseForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          amountBeforeVat: Number(form.amountBeforeVat),
-          vatAmount: Number(form.vatAmount),
+          amountBeforeVat: form.hasVat ? Number(form.amountBeforeVat) : Number(form.grandTotal),
+          vatAmount: form.hasVat ? Number(form.vatAmount) : 0,
           grandTotal: Number(form.grandTotal),
           receiptFileLink,
           duplicateWarning: duplicateNote,
@@ -459,7 +491,10 @@ export default function ExpenseForm({
     try {
       const stored = window.localStorage.getItem(DRAFT_KEY);
       if (!stored) return;
-      const draft = JSON.parse(stored) as FormState;
+      const storedDraft = JSON.parse(stored) as Partial<FormState>;
+      // Drafts made before the VAT switch existed should retain the old,
+      // VAT-enabled behaviour rather than being silently treated as no-VAT.
+      const draft: FormState = { ...INITIAL_STATE, ...storedDraft, hasVat: storedDraft.hasVat ?? true };
       if (!isDraftWorthKeeping(draft)) return;
       // localStorage doesn't exist during SSR, so reading it on mount is
       // exactly the "sync from an external system" case effects are for.
@@ -696,42 +731,38 @@ export default function ExpenseForm({
       </section>
 
       <section className="border-t border-[var(--line)] pt-6">
-      <SectionHeading number="3" title="ยอดค่าใช้จ่าย" description="ยอดก่อน VAT จะคำนวณ VAT และยอดรวมให้อัตโนมัติเหมือนเดิม" />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <SectionHeading number="3" title="ยอดค่าใช้จ่าย" description={form.hasVat ? "ยอดก่อน VAT จะคำนวณ VAT และยอดรวมให้อัตโนมัติ" : "เอกสารนี้แสดงยอดสุทธิเพียงยอดเดียว"} />
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] px-3 py-2.5">
         <div>
-          <label className={labelClass}>จำนวนเงินก่อน VAT</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            className={inputClass}
-            value={formatMoneyDisplay(form.amountBeforeVat)}
-            onChange={(e) => handleAmountBeforeVatChange(parseMoneyInput(e.target.value))}
-            onBlur={() => void refreshPettyCashClassification(form.billDate, form.grandTotal)}
-            required
-          />
+          <p className="text-sm font-semibold text-[var(--ink)]">เอกสารนี้มี VAT 7%</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">ปิดได้หากบิลแสดงเพียงยอดสุทธิ</p>
         </div>
-        <div>
-          <label className={labelClass}>VAT 7%</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            className={inputClass}
-            value={formatMoneyDisplay(form.vatAmount)}
-            onChange={(e) => set("vatAmount", parseMoneyInput(e.target.value))}
-          />
-        </div>
-        <div>
-          <label className={labelClass}>ยอดรวม (Grand Total)</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            className={inputClass}
-            value={formatMoneyDisplay(form.grandTotal)}
-            onChange={(e) => set("grandTotal", parseMoneyInput(e.target.value))}
-            onBlur={() => void refreshPettyCashClassification(form.billDate, form.grandTotal)}
-          />
-        </div>
+        <button type="button" role="switch" aria-checked={form.hasVat} aria-label="เอกสารนี้มี VAT 7%" onClick={() => setVatEnabled(!form.hasVat)} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${form.hasVat ? "bg-[var(--brand)]" : "bg-zinc-300"}`}>
+          <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${form.hasVat ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
       </div>
+      {form.hasVat ? (
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <label className={labelClass}>จำนวนเงินก่อน VAT</label>
+            <input type="text" inputMode="decimal" className={inputClass} value={formatMoneyDisplay(form.amountBeforeVat)} onChange={(e) => handleAmountBeforeVatChange(parseMoneyInput(e.target.value))} onBlur={() => void refreshPettyCashClassification(form.billDate, form.grandTotal)} required />
+          </div>
+          <div>
+            <label className={labelClass}>VAT 7%</label>
+            <input type="text" inputMode="decimal" className={inputClass} value={formatMoneyDisplay(form.vatAmount)} onChange={(e) => set("vatAmount", parseMoneyInput(e.target.value))} required />
+          </div>
+          <div>
+            <label className={labelClass}>ยอดรวม (Grand Total)</label>
+            <input type="text" inputMode="decimal" className={inputClass} value={formatMoneyDisplay(form.grandTotal)} onChange={(e) => handleGrandTotalChange(parseMoneyInput(e.target.value))} onBlur={() => void refreshPettyCashClassification(form.billDate, form.grandTotal)} required />
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4">
+          <label className={labelClass}>ยอดสุทธิ / ยอดรวม</label>
+          <input type="text" inputMode="decimal" className={inputClass} value={formatMoneyDisplay(form.grandTotal)} onChange={(e) => handleGrandTotalChange(parseMoneyInput(e.target.value))} onBlur={() => void refreshPettyCashClassification(form.billDate, form.grandTotal)} required />
+          <p className="mt-1.5 text-xs text-[var(--muted)]">ระบบจะบันทึกยอดก่อน VAT เท่ากับยอดสุทธิ และ VAT เป็น 0 บาท</p>
+        </div>
+      )}
 
       </section>
 

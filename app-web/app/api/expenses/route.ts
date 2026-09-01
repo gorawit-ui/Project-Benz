@@ -56,8 +56,6 @@ const REQUIRED_FIELDS = [
   "supplierNameTh",
   "expenseDetail",
   "odooCategory",
-  "amountBeforeVat",
-  "vatAmount",
   "grandTotal",
 ] as const;
 
@@ -66,9 +64,20 @@ type ExpenseSubmission = Record<(typeof REQUIRED_FIELDS)[number], unknown> & {
   supplierNameEn?: string;
   costCenter?: string;
   accName?: string;
+  amountBeforeVat?: unknown;
+  vatAmount?: unknown;
+  hasVat?: boolean;
   receiptFileLink?: string;
   duplicateWarning?: string;
 };
+
+function normaliseTaxAmounts(body: Partial<ExpenseSubmission>) {
+  const grandTotal = Number(body.grandTotal);
+  const hasVat = body.hasVat !== false;
+  const amountBeforeVat = hasVat ? Number(body.amountBeforeVat) : grandTotal;
+  const vatAmount = hasVat ? Number(body.vatAmount) : 0;
+  return { amountBeforeVat, vatAmount, grandTotal };
+}
 
 /** POST /api/expenses — validates and appends one manual-entry expense row. */
 export async function POST(req: NextRequest) {
@@ -95,6 +104,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const amounts = normaliseTaxAmounts(body);
+  if (![amounts.amountBeforeVat, amounts.vatAmount, amounts.grandTotal].every(Number.isFinite) || amounts.grandTotal <= 0) {
+    return NextResponse.json({ error: "จำนวนเงินไม่ถูกต้อง" }, { status: 400 });
+  }
+
   const row: Omit<ExpenseRow, "id"> = {
     recordedAt: new Date().toISOString(),
     recordedBy: session.user.name ?? session.user.email ?? "unknown",
@@ -110,9 +124,9 @@ export async function POST(req: NextRequest) {
     odooCategory: String(body.odooCategory),
     costCenter: body.costCenter ? String(body.costCenter) : team.costCenter ?? "",
     accName: body.accName ? String(body.accName) : "",
-    amountBeforeVat: Number(body.amountBeforeVat),
-    vatAmount: Number(body.vatAmount),
-    grandTotal: Number(body.grandTotal),
+    amountBeforeVat: amounts.amountBeforeVat,
+    vatAmount: amounts.vatAmount,
+    grandTotal: amounts.grandTotal,
     receiptFileLink: body.receiptFileLink ? String(body.receiptFileLink) : "",
     receiptDocLink: "",
     // Populated client-side by ExpenseForm's pre-submit duplicate check
