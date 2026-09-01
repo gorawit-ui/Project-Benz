@@ -6,6 +6,7 @@ import type { DocumentType, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
 import { ActionButton, PageShell, SectionHeading, Surface } from "./ui";
+import BilliMascot from "./BilliMascot";
 import SuccessDialog from "./SuccessDialog";
 
 const DOCUMENT_TYPES: DocumentType[] = ["ใบเสร็จรับเงิน", "ใบกำกับภาษี", "บิลเงินสด", "บิลทางด่วน", "สลิป Grab"];
@@ -387,9 +388,7 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
     {ocrCompletedCount < entries.length && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-5 backdrop-blur-sm" role="status" aria-live="polite">
         <div className="w-full max-w-sm rounded-2xl border border-white/70 bg-white p-6 text-center shadow-2xl">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-            <span className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          </div>
+          <BilliMascot mood="scan" size="md" className="mx-auto" />
           <h2 className="mt-4 text-lg font-bold text-[var(--ink)]">กำลังอ่านเอกสาร</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">อ่านแล้ว {ocrCompletedCount} จาก {entries.length} ใบ</p>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-emerald-100" role="progressbar" aria-valuemin={0} aria-valuemax={entries.length} aria-valuenow={ocrCompletedCount}>

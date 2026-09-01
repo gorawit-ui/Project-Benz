@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import BilliMascot from "./BilliMascot";
 
 export default function SuccessDialog({
   title = "บันทึกสำเร็จแล้ว",
@@ -26,11 +27,7 @@ export default function SuccessDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4" role="dialog" aria-modal="true" aria-labelledby="save-success-title">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-            <path d="m5 12 4 4L19 6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
+        <BilliMascot mood="success" size="md" className="mx-auto" />
         <h2 id="save-success-title" className="mt-4 text-xl font-bold text-slate-900">{title}</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">{detail}</p>
         {primaryLabel && onPrimary && (

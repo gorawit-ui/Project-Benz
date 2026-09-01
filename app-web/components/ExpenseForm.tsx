@@ -8,6 +8,7 @@ import { findDuplicateExpense } from "@/lib/duplicateCheck";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS, getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
 import ComboBox from "./ComboBox";
 import { ActionButton, SectionHeading } from "./ui";
+import BilliMascot from "./BilliMascot";
 import SuccessDialog from "./SuccessDialog";
 
 const DOCUMENT_TYPES: DocumentType[] = [
@@ -852,6 +853,7 @@ export default function ExpenseForm({
               <p className="mt-1 text-xs text-[var(--muted)]">{ocrLoading ? "กำลังอ่านข้อมูลด้วย OCR..." : "พร้อมแนบกับรายการ"}</p>
               {ocrLoading && <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--line)]"><div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--brand)]" /></div>}
             </div>
+            {ocrLoading && <BilliMascot mood="scan" size="sm" className="-mr-1" />}
           </div>
         )}
 
