@@ -9,25 +9,30 @@
 import { useState } from "react";
 import CaptureStep from "./CaptureStep";
 import ExpenseForm from "./ExpenseForm";
+import BatchExpenseForm from "./BatchExpenseForm";
 import { ActionButton, PageShell } from "./ui";
 
 export default function CaptureFlow({ recordedByName }: { recordedByName: string }) {
   const [step, setStep] = useState<"capture" | "form">("capture");
-  const [initialFile, setInitialFile] = useState<File | null>(null);
+  const [initialFiles, setInitialFiles] = useState<File[]>([]);
 
   if (step === "capture") {
     return (
       <CaptureStep
-        onFileSelected={(file) => {
-          setInitialFile(file);
+        onFileSelected={(files) => {
+          setInitialFiles(files);
           setStep("form");
         }}
         onSkip={() => {
-          setInitialFile(null);
+          setInitialFiles([]);
           setStep("form");
         }}
       />
     );
+  }
+
+  if (initialFiles.length > 1) {
+    return <BatchExpenseForm files={initialFiles} />;
   }
 
   return (
@@ -49,7 +54,7 @@ export default function CaptureFlow({ recordedByName }: { recordedByName: string
         ตรวจสอบข้อมูลที่อ่านได้ (หรือกรอกเอง) แล้วบันทึกเข้าสถานะ &ldquo;รอตรวจ&rdquo;
       </p>
       <div className="mt-5">
-        <ExpenseForm recordedByName={recordedByName} initialFile={initialFile} />
+        <ExpenseForm recordedByName={recordedByName} initialFile={initialFiles[0] ?? null} />
       </div>
     </PageShell>
   );
