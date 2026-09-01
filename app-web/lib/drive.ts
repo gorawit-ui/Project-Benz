@@ -13,6 +13,7 @@
 import { Readable } from "node:stream";
 import { google, drive_v3 } from "googleapis";
 import { getDriveFolderId, setDriveFolderId } from "./sheets";
+import { driveFileIdFromLink } from "./driveLinks";
 
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 
@@ -77,13 +78,14 @@ async function resolveFolderId(
   accessToken: string,
   sheetId: string,
   parentFolderId: string,
-  folderName: string
+  folderName: string,
+  registryKey = folderName
 ): Promise<string> {
-  const registered = await getDriveFolderId(accessToken, sheetId, folderName);
+  const registered = await getDriveFolderId(accessToken, sheetId, registryKey);
   if (registered) return registered;
 
   const folderId = await findOrCreateFolder(drive, parentFolderId, folderName);
-  await setDriveFolderId(accessToken, sheetId, folderName, folderId);
+  await setDriveFolderId(accessToken, sheetId, registryKey, folderId);
   return folderId;
 }
 
@@ -148,6 +150,56 @@ export async function uploadReceiptFile(
     webViewLink:
       uploaded.data.webViewLink ??
       `https://drive.google.com/file/d/${uploaded.data.id}/view`,
+  };
+}
+
+/**
+ * Copies a cash receipt and its generated receipt document into a dedicated
+ * evidence folder for that one expense. The originals are deliberately kept
+ * in their existing folders and sheet links, so creating this convenient
+ * pair never breaks the usual receipt/document lookup flow.
+ */
+export async function copyCashBillEvidenceBundle(
+  accessToken: string,
+  sheetId: string,
+  rootFolderId: string,
+  expenseId: string,
+  receiptFileLink: string,
+  receiptDocumentFileId: string
+): Promise<{ folderId: string; webViewLink: string }> {
+  const receiptFileId = driveFileIdFromLink(receiptFileLink);
+  if (!receiptFileId) {
+    throw new Error("ไม่พบรหัสไฟล์บิลเงินสดสำหรับจัดชุดเอกสาร");
+  }
+
+  const drive = driveClient(accessToken);
+  const bundleRootName = "บิลเงินสดพร้อมเอกสารรับเงิน";
+  const bundleRootId = await resolveFolderId(
+    drive,
+    accessToken,
+    sheetId,
+    rootFolderId,
+    bundleRootName,
+    "cash-bill-evidence-bundles-root"
+  );
+  const folderName = expenseId;
+  const folderId = await resolveFolderId(
+    drive,
+    accessToken,
+    sheetId,
+    bundleRootId,
+    folderName,
+    `cash-bill-evidence-bundle:${expenseId}`
+  );
+
+  await Promise.all([
+    drive.files.copy({ fileId: receiptFileId, requestBody: { parents: [folderId] } }),
+    drive.files.copy({ fileId: receiptDocumentFileId, requestBody: { parents: [folderId] } }),
+  ]);
+
+  return {
+    folderId,
+    webViewLink: `https://drive.google.com/drive/folders/${folderId}`,
   };
 }
 
