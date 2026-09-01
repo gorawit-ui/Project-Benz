@@ -11,6 +11,7 @@
  */
 import { useRef, useState, type FormEvent } from "react";
 import { useSession } from "next-auth/react";
+import BilliMascot from "./BilliMascot";
 
 type SubmitMessage = { type: "success" | "error"; text: string };
 
@@ -68,23 +69,14 @@ export default function ReportBugButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="แจ้งปัญหา / บัค"
-        className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-700 text-white shadow-lg shadow-emerald-950/25 transition-[transform,background-color,box-shadow] duration-150 hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-xl active:translate-y-0 active:scale-90 active:bg-emerald-900 sm:bottom-5"
+        aria-label="ติดต่อเบนซ์เพื่อแจ้งปัญหา"
+        aria-haspopup="dialog"
+        className="group fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-3 z-40 flex h-16 w-16 items-center justify-center rounded-full outline-none transition-transform duration-200 hover:-translate-y-1 focus-visible:ring-4 focus-visible:ring-emerald-500/35 active:translate-y-0 active:scale-95 sm:bottom-4 sm:right-4 sm:h-[4.5rem] sm:w-[4.5rem]"
       >
-        <svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-          <path d="M12 17h.01" />
-          <circle cx="12" cy="12" r="9" />
-        </svg>
+        <span className="pointer-events-none absolute -top-8 right-0 whitespace-nowrap rounded-full border border-emerald-100 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-900 shadow-sm transition-all duration-200 sm:translate-y-1 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 sm:group-focus-visible:translate-y-0 sm:group-focus-visible:opacity-100">
+          ติดต่อเบนซ์
+        </span>
+        <BilliMascot mood="idle" size="sm" decorative className="billi-mascot--contact w-14 sm:w-16" />
       </button>
 
       {open && (
