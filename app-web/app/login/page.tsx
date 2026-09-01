@@ -4,7 +4,6 @@ import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Suspense, useEffect, useState } from "react";
-import BilliMascot from "@/components/BilliMascot";
 
 export default function LoginPage() {
   return (
@@ -51,17 +50,14 @@ function LoginPageContent() {
         </div>
 
         <div className="flex-1 p-6 text-center sm:p-10 sm:text-left">
-          <div className="flex items-center justify-center gap-3 sm:justify-start">
-            <BilliMascot mood="idle" size="md" />
-            <div>
-              <p className="text-3xl">🍃</p>
-              <h1 className="mt-1 text-2xl font-bold text-emerald-800">TDFB Expense Tracking</h1>
-              <p className="mt-1 text-sm text-zinc-500">
-                ยินดีต้อนรับ! บันทึกง่าย ตรวจสอบได้ทุกบิล
-                <br />
-                เงินสดย่อย / เงินทดรองจ่าย ของทีม
-              </p>
-            </div>
+          <div>
+            <p className="text-3xl">🍃</p>
+            <h1 className="mt-1 text-2xl font-bold text-emerald-800">TDFB Expense Tracking</h1>
+            <p className="mt-1 text-sm text-zinc-500">
+              ยินดีต้อนรับ! บันทึกง่าย ตรวจสอบได้ทุกบิล
+              <br />
+              เงินสดย่อย / เงินทดรองจ่าย ของทีม
+            </p>
           </div>
 
           {error && (
