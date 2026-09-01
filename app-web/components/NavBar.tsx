@@ -16,6 +16,7 @@ const LINKS = [
 export default function NavBar() {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
 
   // Live clock in the header corner. Starts as null (not "new Date()") so
   // the server-rendered markup and the first client render match — filling
@@ -46,6 +47,14 @@ export default function NavBar() {
       void signIn("google");
     }
   }, [session?.error]);
+
+  function startNavigation(href: string) {
+    setPendingHref(href);
+    // Next's client navigation normally completes immediately. The short
+    // fallback avoids leaving a spinner behind if a same-page click does not
+    // trigger a route transition.
+    window.setTimeout(() => setPendingHref((current) => (current === href ? null : current)), 1400);
+  }
 
   if (!session) return null;
 
@@ -81,18 +90,20 @@ export default function NavBar() {
             >
               {LINKS.map((link) => {
                 const active = pathname === link.href;
+                const pending = pendingHref === link.href;
                 return (
                   <Link
                     key={link.href}
                     href={link.href}
+                    onClick={() => startNavigation(link.href)}
                     aria-current={active ? "page" : undefined}
-                    className={`inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 active:scale-95 ${
+                    className={`inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 py-2 text-sm font-medium transition-[transform,background-color,color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 active:translate-y-px active:scale-95 ${
                       active
                         ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]"
                         : "text-[var(--muted)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink)]"
                     }`}
                   >
-                    {link.label}
+                    {pending ? "กำลังเปิด..." : link.label}
                   </Link>
                 );
               })}
@@ -114,10 +125,11 @@ export default function NavBar() {
     <nav aria-label="เมนูหลักบนมือถือ" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-[var(--line)] bg-white/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 backdrop-blur sm:hidden">
       {LINKS.map((link) => {
         const active = pathname === link.href;
+        const pending = pendingHref === link.href;
         return (
-          <Link key={link.href} href={link.href} aria-current={active ? "page" : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium transition ${active ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>
-            <NavGlyph name={link.icon} />
-            <span>{link.shortLabel}</span>
+          <Link key={link.href} href={link.href} onClick={() => startNavigation(link.href)} aria-current={active ? "page" : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium transition-[transform,background-color,color,opacity] duration-150 active:scale-90 ${active ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"} ${pending ? "opacity-60" : ""}`}>
+            {pending ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-label="กำลังเปิดหน้า" /> : <NavGlyph name={link.icon} />}
+            <span>{pending ? "กำลังเปิด" : link.shortLabel}</span>
           </Link>
         );
       })}

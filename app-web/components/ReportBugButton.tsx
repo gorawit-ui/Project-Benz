@@ -69,7 +69,7 @@ export default function ReportBugButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="แจ้งปัญหา / บัค"
-        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-700 text-white shadow-lg transition-all duration-150 hover:bg-emerald-800 active:scale-95 active:bg-emerald-900"
+        className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-700 text-white shadow-lg shadow-emerald-950/25 transition-[transform,background-color,box-shadow] duration-150 hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-xl active:translate-y-0 active:scale-90 active:bg-emerald-900 sm:bottom-5"
       >
         <svg
           width="24"

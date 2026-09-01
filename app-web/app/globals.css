@@ -41,5 +41,16 @@ input, select, textarea { accent-color: var(--brand); }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]) {
     cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* A brief, tactile acknowledgement on touch devices. Individual primary
+     buttons can still provide their own loading state after this press. */
+  button:not(:disabled):active {
+    filter: brightness(0.96);
+  }
+
+  a[href] {
+    -webkit-tap-highlight-color: transparent;
   }
 }
