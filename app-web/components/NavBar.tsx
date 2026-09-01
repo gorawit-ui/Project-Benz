@@ -9,8 +9,8 @@ import { ActionButton, NavIcon } from "./ui";
 const LINKS = [
   { href: "/", label: "บันทึกค่าใช้จ่าย", shortLabel: "บันทึก", icon: "plus" },
   { href: "/review", label: "ตรวจทาน", shortLabel: "ตรวจทาน", icon: "check" },
-  { href: "/dashboard", label: "แดชบอร์ด", shortLabel: "ภาพรวม", icon: "chart" },
-  { href: "/receipt-doc/create", label: "สร้างเอกสารรับเงิน", shortLabel: "เอกสาร", icon: "file" },
+  { href: "/dashboard", label: "ภาพรวม", shortLabel: "ภาพรวม", icon: "chart" },
+  { href: "/receipt-doc/create", label: "เอกสารรับเงิน", shortLabel: "เอกสาร", icon: "file" },
 ];
 
 export default function NavBar() {
