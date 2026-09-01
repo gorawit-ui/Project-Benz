@@ -36,7 +36,7 @@ function LoginPageContent() {
        * it gets top billing on mobile and the left column on desktop.
        */}
       <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm sm:flex-row">
-        <div className="relative flex items-center justify-center bg-emerald-50/60 p-4 sm:w-[42%] sm:p-8">
+        <div className="flex items-center justify-center bg-emerald-50/60 p-4 sm:w-[42%] sm:p-8">
           <Image
             src="/team-illustration.png"
             alt="ทีม GM & HR"
@@ -48,17 +48,21 @@ function LoginPageContent() {
             className="h-auto w-full max-w-[150px] sm:max-w-[260px]"
             priority
           />
-          <BilliMascot mood="idle" size="sm" className="absolute bottom-3 right-3 sm:bottom-5 sm:right-5" />
         </div>
 
         <div className="flex-1 p-6 text-center sm:p-10 sm:text-left">
-          <p className="text-4xl">🍃</p>
-          <h1 className="mt-2 text-2xl font-bold text-emerald-800">TDFB Expense Tracking</h1>
-          <p className="mt-2 text-sm text-zinc-500">
-            ยินดีต้อนรับ! บันทึกง่าย ตรวจสอบได้ทุกบิล
-            <br />
-            เงินสดย่อย / เงินทดรองจ่าย ของทีม
-          </p>
+          <div className="flex items-center justify-center gap-3 sm:justify-start">
+            <BilliMascot mood="idle" size="md" />
+            <div>
+              <p className="text-3xl">🍃</p>
+              <h1 className="mt-1 text-2xl font-bold text-emerald-800">TDFB Expense Tracking</h1>
+              <p className="mt-1 text-sm text-zinc-500">
+                ยินดีต้อนรับ! บันทึกง่าย ตรวจสอบได้ทุกบิล
+                <br />
+                เงินสดย่อย / เงินทดรองจ่าย ของทีม
+              </p>
+            </div>
+          </div>
 
           {error && (
             <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
