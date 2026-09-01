@@ -63,13 +63,13 @@ input, select, textarea { accent-color: var(--brand); }
 .billi-mascot--idle > img { animation: billi-float 3.4s ease-in-out infinite; }
 .billi-mascot--scan > img { animation: billi-scan 2.5s ease-in-out infinite; }
 .billi-mascot--success > img { animation: billi-celebrate 1.35s ease-in-out 2; }
-.billi-mascot__scan-ring { position: absolute; inset: 28% 22% auto; aspect-ratio: 1; border: 2px solid rgb(23 107 82 / 35%); border-top-color: var(--brand); border-radius: 999px; animation: billi-spin 1.15s linear infinite; }
+.billi-mascot__speech { position: absolute; left: 72%; top: 10%; z-index: 3; min-width: max-content; max-width: 12rem; border: 1px solid #cfe4da; border-radius: .9rem .9rem .9rem .2rem; background: white; box-shadow: 0 8px 18px rgb(19 48 38 / 12%); color: var(--brand-strong); font-size: .78rem; font-weight: 700; line-height: 1.35; padding: .55rem .7rem; animation: billi-speech 2.5s ease-in-out infinite; }
 .billi-mascot__spark { position: absolute; right: 1%; top: 8%; z-index: 2; color: #1b8a67; font-size: 1.35em; animation: billi-spark 1.35s ease-out 2; }
 @keyframes billi-float { 0%,100% { transform: translateY(2px) rotate(0deg); } 50% { transform: translateY(-5px) rotate(-1deg); } }
 @keyframes billi-scan { 0%,100% { transform: translateY(2px) rotate(-1deg); } 50% { transform: translateY(-5px) rotate(1deg); } }
 @keyframes billi-celebrate { 0%,100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-9px) rotate(-4deg) scale(1.04); } 58% { transform: translateY(-4px) rotate(4deg) scale(1.03); } }
-@keyframes billi-spin { to { transform: rotate(360deg); } }
+@keyframes billi-speech { 0%,100% { transform: translateY(1px); } 50% { transform: translateY(-3px); } }
 @keyframes billi-spark { 0%,100% { opacity: 0; transform: scale(.4) rotate(-20deg); } 35%,75% { opacity: 1; transform: scale(1) rotate(0); } }
 @media (prefers-reduced-motion: reduce) {
-  .billi-mascot > img, .billi-mascot__scan-ring, .billi-mascot__spark { animation: none !important; }
+  .billi-mascot > img, .billi-mascot__speech, .billi-mascot__spark { animation: none !important; }
 }

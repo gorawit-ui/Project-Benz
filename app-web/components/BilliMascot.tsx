@@ -19,10 +19,12 @@ export default function BilliMascot({
   mood = "idle",
   size = "md",
   className = "",
+  speech,
 }: {
   mood?: BilliMood;
   size?: BilliSize;
   className?: string;
+  speech?: string;
 }) {
   const description = mood === "scan" ? "น้องบิลลี่กำลังอ่านเอกสาร" : mood === "success" ? "น้องบิลลี่ยินดีด้วย" : "น้องบิลลี่";
 
@@ -32,7 +34,7 @@ export default function BilliMascot({
           Billi is shown, and keeps the mascot available in every deploy. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={BILLI_DATA_URL} alt="" width={400} height={444} className="h-auto w-full" />
-      {mood === "scan" && <span className="billi-mascot__scan-ring" aria-hidden="true" />}
+      {speech && <span className="billi-mascot__speech">{speech}</span>}
       {mood === "success" && <span className="billi-mascot__spark" aria-hidden="true">✦</span>}
     </div>
   );
