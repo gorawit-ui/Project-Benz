@@ -63,6 +63,11 @@ input, select, textarea { accent-color: var(--brand); }
 .billi-mascot--idle > img { animation: billi-float 3.4s ease-in-out infinite; }
 .billi-mascot--scan > img { animation: billi-scan 2.5s ease-in-out infinite; }
 .billi-mascot--success > img { animation: billi-celebrate 1.35s ease-in-out 2; }
+.billi-mascot--contact > img { animation: billi-float 3.4s ease-in-out infinite; }
+.billi-mascot--contact::after { content: "✦"; position: absolute; right: 1%; top: 7%; z-index: 2; color: #52a486; font-size: .8em; opacity: 0; transform: scale(.45) rotate(-20deg); }
+.group:hover .billi-mascot--contact > img, .group:focus-visible .billi-mascot--contact > img { animation: billi-greet .72s cubic-bezier(.2,.9,.25,1) both; }
+.group:hover .billi-mascot--contact::after, .group:focus-visible .billi-mascot--contact::after { animation: billi-glint .72s ease-out both; }
+.group:active .billi-mascot--contact > img { animation: billi-happy-hop .42s cubic-bezier(.2,.85,.3,1) both; }
 .billi-mascot__speech { position: absolute; left: 72%; top: 10%; z-index: 3; min-width: max-content; max-width: 12rem; border: 1px solid #cfe4da; border-radius: .9rem .9rem .9rem .2rem; background: white; box-shadow: 0 8px 18px rgb(19 48 38 / 12%); color: var(--brand-strong); font-size: .78rem; font-weight: 700; line-height: 1.35; padding: .55rem .7rem; animation: billi-speech 2.5s ease-in-out infinite; }
 .billi-mascot__spark { position: absolute; right: 1%; top: 8%; z-index: 2; color: #1b8a67; font-size: 1.35em; animation: billi-spark 1.35s ease-out 2; }
 @keyframes billi-float { 0%,100% { transform: translateY(2px) rotate(0deg); } 50% { transform: translateY(-5px) rotate(-1deg); } }
@@ -70,6 +75,9 @@ input, select, textarea { accent-color: var(--brand); }
 @keyframes billi-celebrate { 0%,100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-9px) rotate(-4deg) scale(1.04); } 58% { transform: translateY(-4px) rotate(4deg) scale(1.03); } }
 @keyframes billi-speech { 0%,100% { transform: translateY(1px); } 50% { transform: translateY(-3px); } }
 @keyframes billi-spark { 0%,100% { opacity: 0; transform: scale(.4) rotate(-20deg); } 35%,75% { opacity: 1; transform: scale(1) rotate(0); } }
+@keyframes billi-greet { 0% { transform: translateY(2px) rotate(0) scale(1); } 38% { transform: translateY(-7px) rotate(-7deg) scale(1.05, .96); } 70% { transform: translateY(-3px) rotate(4deg) scale(1.02); } 100% { transform: translateY(0) rotate(0) scale(1); } }
+@keyframes billi-happy-hop { 0% { transform: translateY(0) scale(1); } 42% { transform: translateY(-10px) scale(1.04, .94); } 100% { transform: translateY(0) scale(.96, 1.04); } }
+@keyframes billi-glint { 0% { opacity: 0; transform: scale(.45) rotate(-20deg); } 45% { opacity: 1; transform: scale(1) rotate(0); } 100% { opacity: 0; transform: scale(.75) rotate(20deg); } }
 @media (prefers-reduced-motion: reduce) {
   .billi-mascot > img, .billi-mascot__speech, .billi-mascot__spark { animation: none !important; }
 }
