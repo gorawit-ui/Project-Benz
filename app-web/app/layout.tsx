@@ -53,7 +53,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className={`${prompt.className} min-h-full flex flex-col bg-zinc-50 text-zinc-900`}>
         <SessionProviderWrapper>
           <NavBar />
-          <main className="flex-1">{children}</main>
+          <main className="flex-1 pb-20 sm:pb-0">{children}</main>
           <ReportBugButton />
         </SessionProviderWrapper>
       </body>
