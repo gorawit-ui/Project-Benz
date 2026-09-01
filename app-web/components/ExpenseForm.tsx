@@ -7,6 +7,7 @@ import { findDuplicateExpense } from "@/lib/duplicateCheck";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS, getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
 import ComboBox from "./ComboBox";
 import { ActionButton, SectionHeading } from "./ui";
+import SuccessDialog from "./SuccessDialog";
 
 const DOCUMENT_TYPES: DocumentType[] = [
   "ใบเสร็จรับเงิน",
@@ -125,6 +126,7 @@ export default function ExpenseForm({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrMessage, setOcrMessage] = useState<OcrMessage | null>(null);
 
@@ -377,6 +379,7 @@ export default function ExpenseForm({
       }
 
       setMessage({ type: "success", text: "บันทึกรายการเรียบร้อยแล้ว 🎉 ส่งเข้ารอตรวจให้เลย" });
+      setShowSuccessDialog(true);
       // Only now is the draft safe to drop — a failed submit above keeps it.
       try {
         window.localStorage.removeItem(DRAFT_KEY);
@@ -880,6 +883,15 @@ export default function ExpenseForm({
         >
           {submitting ? "กำลังบันทึก..." : checkingDuplicate ? "กำลังตรวจสอบรายการซ้ำ..." : "บันทึกรายการ (รอตรวจ)"}
         </ActionButton>
+      )}
+
+      {showSuccessDialog && (
+        <SuccessDialog
+          detail="บันทึกรายการลง Google Sheet แล้ว และส่งเข้ารอตรวจเรียบร้อย"
+          primaryLabel="ไปที่ Dashboard"
+          onPrimary={() => window.location.assign("/dashboard")}
+          onClose={() => setShowSuccessDialog(false)}
+        />
       )}
     </form>
   );
