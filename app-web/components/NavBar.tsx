@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { ActionButton } from "./ui";
+import { ActionButton, NavIcon } from "./ui";
 
 const LINKS = [
-  { href: "/", label: "บันทึกค่าใช้จ่าย" },
-  { href: "/review", label: "ตรวจทาน" },
-  { href: "/dashboard", label: "แดชบอร์ด" },
-  { href: "/receipt-doc/create", label: "สร้างเอกสารรับเงิน" },
+  { href: "/", label: "บันทึกค่าใช้จ่าย", shortLabel: "บันทึก", icon: "plus" },
+  { href: "/review", label: "ตรวจทาน", shortLabel: "ตรวจทาน", icon: "check" },
+  { href: "/dashboard", label: "แดชบอร์ด", shortLabel: "ภาพรวม", icon: "chart" },
+  { href: "/receipt-doc/create", label: "สร้างเอกสารรับเงิน", shortLabel: "เอกสาร", icon: "file" },
 ];
 
 export default function NavBar() {
@@ -50,6 +50,7 @@ export default function NavBar() {
   if (!session) return null;
 
   return (
+    <>
     <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-white/95 backdrop-blur">
       {/* Split into rows (brand+clock / nav links / user+logout) rather than
           one big flex-wrap of everything — on a phone, wrapping was mixing
@@ -72,8 +73,8 @@ export default function NavBar() {
           )}
         </div>
 
-        <div className="mt-2 flex items-center gap-3 border-t border-[var(--line)] pt-2">
-          <div className="min-w-0 flex-1 overflow-hidden">
+        <div className="mt-2 flex items-center justify-end gap-3 border-t border-[var(--line)] pt-2 sm:justify-start">
+          <div className="hidden min-w-0 flex-1 overflow-hidden sm:block">
             <nav
               aria-label="เมนูหลัก"
               className="flex w-full gap-1 overflow-x-auto pb-0.5 pr-3 [scrollbar-width:none]"
@@ -110,7 +111,24 @@ export default function NavBar() {
         </div>
       </div>
     </header>
+    <nav aria-label="เมนูหลักบนมือถือ" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-[var(--line)] bg-white/95 px-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] pt-1 backdrop-blur sm:hidden">
+      {LINKS.map((link) => {
+        const active = pathname === link.href;
+        return (
+          <Link key={link.href} href={link.href} aria-current={active ? "page" : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium transition ${active ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>
+            <NavGlyph name={link.icon} />
+            <span>{link.shortLabel}</span>
+          </Link>
+        );
+      })}
+    </nav>
+    </>
   );
+}
+
+function NavGlyph({ name }: { name: string }) {
+  const common = { width: 19, height: 19, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  return <NavIcon>{name === "plus" ? <svg {...common}><path d="M12 5v14M5 12h14" /></svg> : name === "check" ? <svg {...common}><path d="m5 12 4 4L19 6" /></svg> : name === "chart" ? <svg {...common}><path d="M4 19V5M4 19h16M8 16v-5M12 16V7M16 16V9" /></svg> : <svg {...common}><path d="M6 3h9l3 3v15H6z" /><path d="M15 3v4h4M9 12h6M9 16h6" /></svg>}</NavIcon>;
 }
 
 /** Greets by time of day — the clock was already here, so this is free warmth. */
