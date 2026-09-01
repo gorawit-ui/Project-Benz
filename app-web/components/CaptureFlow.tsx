@@ -41,7 +41,7 @@ export default function CaptureFlow({ recordedByName }: { recordedByName: string
         variant="ghost"
         type="button"
         onClick={() => {
-          setInitialFile(null);
+          setInitialFiles([]);
           setStep("capture");
         }}
         className="-ml-3 mb-3"
