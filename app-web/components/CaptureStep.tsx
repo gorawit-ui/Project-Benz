@@ -7,8 +7,9 @@
  * (ExpenseForm triggers it automatically for an `initialFile`), so this
  * component owns capture only, not any OCR/form logic.
  */
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { ActionButton, PageShell, Surface } from "./ui";
+import { MAX_BATCH_FILES, getBatchFileCountError } from "@/lib/batchFileLimit";
 
 export default function CaptureStep({
   onFileSelected,
@@ -19,11 +20,19 @@ export default function CaptureStep({
 }) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
-    if (files.length > 0) onFileSelected(files);
     e.target.value = "";
+    if (files.length === 0) return;
+    const countError = getBatchFileCountError(files.length);
+    if (countError) {
+      setError(countError);
+      return;
+    }
+    setError(null);
+    onFileSelected(files);
   }
 
   return (
@@ -104,7 +113,16 @@ export default function CaptureStep({
         />
       </div>
 
-      <p className="mt-4 text-center text-xs leading-5 text-[var(--muted)]">รองรับ JPEG, PNG และ PDF · เลือกหลายไฟล์ได้ และจะได้ตรวจข้อมูล OCR ของแต่ละบิลก่อนบันทึก</p>
+      <p className="mt-4 text-center text-xs font-semibold leading-5 text-[var(--ink)]">
+        แนบไฟล์ได้สูงสุด {MAX_BATCH_FILES} ไฟล์ต่อครั้ง
+      </p>
+      <p className="mt-1 text-center text-xs leading-5 text-[var(--muted)]">รองรับ JPEG, PNG และ PDF · เลือกหลายไฟล์ได้ ตรวจข้อมูล OCR ทีละบิลก่อนบันทึก</p>
+
+      {error && (
+        <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-center text-xs text-red-700">
+          {error}
+        </p>
+      )}
       </Surface>
 
       <ActionButton

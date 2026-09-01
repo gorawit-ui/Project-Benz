@@ -5,12 +5,25 @@ import { useRouter } from "next/navigation";
 import type { DocumentType, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
+import { runWithConcurrency } from "@/lib/concurrency";
 import { ActionButton, PageShell, SectionHeading, Surface } from "./ui";
 import BilliMascot from "./BilliMascot";
 import SuccessDialog from "./SuccessDialog";
 
 const DOCUMENT_TYPES: DocumentType[] = ["ใบเสร็จรับเงิน", "ใบกำกับภาษี", "บิลเงินสด", "บิลทางด่วน", "สลิป Grab"];
 const VAT_RATE = 0.07;
+// Firing OCR for every file in parallel meant a full 20-file batch sent 20
+// simultaneous Gemini requests. The Gemini free tier's binding limit is
+// requests-per-minute (~10 RPM), not how many are in flight at once — so
+// concurrency alone (even limit: 1) doesn't guarantee staying under it if
+// each call happens to resolve quickly. One file at a time, at least
+// OCR_MIN_INTERVAL_MS apart, keeps a full 20-file batch safely under that
+// ceiling regardless of how fast Gemini responds. See lib/concurrency.ts's
+// minIntervalMs — it only adds a wait when a call finishes faster than this
+// floor, so a naturally slower call (a big PDF, a busy moment) isn't padded
+// further.
+const OCR_CONCURRENCY = 1;
+const OCR_MIN_INTERVAL_MS = 7000; // ~8.6 requests/min, under the ~10 RPM free-tier cap with margin
 
 type FormState = {
   fundType: FundType;
@@ -139,8 +152,13 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
   const [savedCount, setSavedCount] = useState<number | null>(null);
 
   useEffect(() => {
-    entries.forEach((entry) => {
-      void (async () => {
+    // Same per-file request and state transitions as before — only the
+    // pacing changed, from "all at once" to one file every
+    // OCR_MIN_INTERVAL_MS (see the constants above for why).
+    void runWithConcurrency(
+      entries,
+      OCR_CONCURRENCY,
+      async (entry) => {
         try {
           const payload = new FormData();
           payload.append("file", entry.file);
@@ -165,8 +183,9 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
               : item
           ));
         }
-      })();
-    });
+      },
+      { minIntervalMs: OCR_MIN_INTERVAL_MS }
+    );
     // files are fixed when entering this page; each entry must be OCR'd once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
