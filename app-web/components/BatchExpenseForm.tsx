@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import type { DocumentType, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
@@ -96,6 +97,7 @@ function ocrPatch(data: ExtractedReceiptData): Partial<FormState> {
 }
 
 export default function BatchExpenseForm({ files }: { files: File[] }) {
+  const router = useRouter();
   const [entries, setEntries] = useState<Entry[]>(() =>
     files.map((file, index) => ({
       key: String(index) + "-" + file.name + "-" + file.lastModified,
@@ -290,7 +292,7 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
           title="บันทึกสำเร็จแล้ว"
           detail={"อัปโหลดและบันทึก " + savedCount + " บิลลง Google Sheet แล้ว สถานะเป็น “ตรวจแล้ว” กำลังพาไปหน้า Dashboard"}
           primaryLabel="ไปที่ Dashboard ตอนนี้"
-          onPrimary={() => window.location.assign("/dashboard")}
+          onPrimary={() => router.push("/dashboard")}
           autoRedirectSeconds={2}
         />
       )}
