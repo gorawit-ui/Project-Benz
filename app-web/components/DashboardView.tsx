@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type { ExpenseRow, ExpenseStatus } from "@/lib/sheets";
 import ReceiptViewer from "./ReceiptViewer";
 
@@ -52,6 +53,7 @@ export default function DashboardView() {
   const [cancelBusyId, setCancelBusyId] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [showAllCategories, setShowAllCategories] = useState(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Floating confirmation that auto-dismisses. */
@@ -234,6 +236,7 @@ export default function DashboardView() {
     return [...totals.entries()].sort((a, b) => b[1] - a[1]);
   }, [rows]);
   const maxCategoryTotal = categoryTotals.length > 0 ? categoryTotals[0][1] : 0;
+  const visibleCategoryTotals = showAllCategories ? categoryTotals : categoryTotals.slice(0, 4);
 
   const categoryOptions = useMemo(() => {
     const set = new Set<string>();
@@ -301,10 +304,14 @@ export default function DashboardView() {
 
   if (rows === null) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {toastElement}
-        {monthSelect}
-        <p className="text-sm text-zinc-500">กำลังโหลดข้อมูล รอสักครู่นะ...</p>
+        <div className="h-10 w-40 animate-pulse rounded-lg bg-zinc-200" />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="h-44 animate-pulse rounded-2xl bg-zinc-200" />
+          <div className="h-44 animate-pulse rounded-2xl bg-zinc-200" />
+        </div>
+        <p className="text-sm text-zinc-500">กำลังโหลดภาพรวมค่าใช้จ่าย...</p>
       </div>
     );
   }
@@ -334,16 +341,28 @@ export default function DashboardView() {
   return (
     <div className="space-y-8">
       {toastElement}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[.16em] text-[var(--brand)]">Expense overview</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[var(--ink)]">ภาพรวมค่าใช้จ่าย</h1>
+          <p className="mt-1 text-xs text-zinc-400">อัปเดตล่าสุด: {fetchedAt ? fetchedAt.toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "-"}</p>
+        </div>
+        <Link href="/" className="inline-flex min-h-11 items-center rounded-xl bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-strong)]">
+          + บันทึกรายการ
+        </Link>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-white p-3">
+        <div>
+          <p className="text-xs font-semibold text-[var(--ink)]">ข้อมูลของเดือน</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">เปลี่ยนเดือนเพื่อดูยอดและรายการย้อนหลัง</p>
+        </div>
         {monthSelect}
-        <p className="text-xs text-zinc-400">
-          อัปเดตล่าสุด: {fetchedAt ? fetchedAt.toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "-"}
-          {selectedMonth ? ` · ข้อมูลเดือน ${selectedMonth}` : ""}
-        </p>
       </div>
 
       {/* Fund summary cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <section>
+        <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-zinc-400">✨ สรุปเดือนนี้</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* เงินสดย่อย */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
@@ -420,19 +439,24 @@ export default function DashboardView() {
             )
           )}
         </div>
-      </div>
+        </div>
+      </section>
 
       {/* Category breakdown */}
       <div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-400">📊 แยกตามหมวดหมู่ (ตาม Odoo)</h2>
-          {monthSelect}
+          {categoryTotals.length > 4 && (
+            <button type="button" onClick={() => setShowAllCategories((current) => !current)} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-[var(--brand)] hover:bg-[var(--brand-soft)]">
+              {showAllCategories ? "ย่อรายการ" : `ดูทั้งหมด ${categoryTotals.length} หมวด`}
+            </button>
+          )}
         </div>
         {categoryTotals.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">เดือนนี้ยังไม่มีค่าใช้จ่ายเลย 🌱</p>
         ) : (
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {categoryTotals.map(([category, total]) => (
+            {visibleCategoryTotals.map(([category, total]) => (
               <div key={category} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
                 <span className="text-sm font-semibold text-zinc-700">{category}</span>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100">
@@ -448,8 +472,13 @@ export default function DashboardView() {
         )}
       </div>
 
+      <section>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-400">🧾 รายการล่าสุด</h2>
+        <span className="text-xs text-zinc-400">{filteredRows.length} รายการ</span>
+      </div>
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 rounded-xl border border-[var(--line)] bg-white p-3 sm:flex-row sm:items-center">
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as "" | "ยกเลิก")}
@@ -649,6 +678,7 @@ export default function DashboardView() {
           </div>
         </>
       )}
+      </section>
 
       {/* Cancel-reason modal — pops up instead of an inline row so the flow
           stays usable on a phone. */}

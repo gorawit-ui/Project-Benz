@@ -66,6 +66,20 @@ function parseMoney(value: string) {
   return value.replace(/,/g, "").replace(/[^\d.]/g, "");
 }
 
+function isEntryComplete(entry: Entry) {
+  const { form } = entry;
+  return Boolean(
+    form.documentNumber.trim() &&
+      form.billDate &&
+      form.supplierNameTh.trim() &&
+      form.expenseDetail.trim() &&
+      form.odooCategory.trim() &&
+      Number(form.amountBeforeVat) >= 0 &&
+      Number(form.vatAmount) >= 0 &&
+      Number(form.grandTotal) > 0
+  );
+}
+
 function ocrPatch(data: ExtractedReceiptData): Partial<FormState> {
   const patch: Partial<FormState> = {};
   if (data.documentType) patch.documentType = data.documentType;
@@ -199,6 +213,9 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
 
   const inputClass = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
   const labelClass = "block text-xs font-semibold text-slate-700";
+  const completeCount = entries.filter(isEntryComplete).length;
+  const incompleteCount = entries.length - completeCount;
+  const batchTotal = entries.reduce((sum, entry) => sum + (Number(entry.form.grandTotal) || 0), 0);
 
   return (
     <PageShell>
@@ -212,6 +229,9 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
         {entries.map((entry, index) => (
           <Surface key={entry.key} className="p-4 sm:p-6">
             <SectionHeading number={String(index + 1)} title={entry.file.name} description={entry.ocrText} />
+            <div className={`mb-3 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${isEntryComplete(entry) ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
+              {isEntryComplete(entry) ? "พร้อมบันทึก" : "ยังมีข้อมูลที่ต้องตรวจ"}
+            </div>
             <p className={"mt-3 rounded-lg px-3 py-2 text-xs " + (entry.ocrState === "done" ? "bg-emerald-50 text-emerald-800" : entry.ocrState === "loading" ? "bg-sky-50 text-sky-800" : "bg-amber-50 text-amber-900")}>
               {entry.ocrState === "loading" ? "กำลัง OCR..." : entry.ocrState === "done" ? "OCR สำเร็จ — ตรวจข้อมูลก่อนส่ง" : "OCR ต้องตรวจทานเพิ่มเติม — ยังแก้ไขและส่งได้"}
             </p>
@@ -282,9 +302,18 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
         ))}
 
         {error && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
-        <ActionButton type="submit" disabled={submitting || entries.some((entry) => entry.ocrState === "loading")} className="sticky bottom-3 z-20 w-full shadow-lg sm:static">
-          {submitting ? "กำลังอัปโหลดและบันทึก..." : "บันทึกทั้งหมดและผ่านอัตโนมัติ"}
-        </ActionButton>
+        <div className="sticky bottom-3 z-20 rounded-2xl border border-[var(--line)] bg-white/95 p-3 shadow-xl backdrop-blur sm:static sm:shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3 text-sm">
+            <div>
+              <p className="font-semibold text-[var(--ink)]">ตรวจครบแล้ว {completeCount}/{entries.length} บิล</p>
+              <p className="mt-0.5 text-xs text-[var(--muted)]">ยอดรวมโดยประมาณ ฿{batchTotal.toLocaleString("th-TH", { maximumFractionDigits: 2 })}</p>
+            </div>
+            {incompleteCount > 0 && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">เหลือ {incompleteCount} บิล</span>}
+          </div>
+          <ActionButton type="submit" disabled={submitting || incompleteCount > 0 || entries.some((entry) => entry.ocrState === "loading")} className="w-full">
+            {submitting ? "กำลังอัปโหลดและบันทึก..." : incompleteCount > 0 ? `ตรวจข้อมูลให้ครบอีก ${incompleteCount} บิล` : "บันทึกทั้งหมดและผ่านอัตโนมัติ"}
+          </ActionButton>
+        </div>
       </form>
 
       {savedCount !== null && (

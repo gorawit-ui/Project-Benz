@@ -181,10 +181,12 @@ export default function ReviewList() {
 
   if (rows === null) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {toastElement}
         {monthSelect}
-        <p className="text-sm text-zinc-500">กำลังโหลดข้อมูล รอสักครู่นะ...</p>
+        <div className="h-12 animate-pulse rounded-xl bg-zinc-200" />
+        <div className="h-40 animate-pulse rounded-xl bg-zinc-200" />
+        <p className="text-sm text-zinc-500">กำลังโหลดรายการรอตรวจ...</p>
       </div>
     );
   }

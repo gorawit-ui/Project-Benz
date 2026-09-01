@@ -35,7 +35,7 @@ function LoginPageContent() {
        * it gets top billing on mobile and the left column on desktop.
        */}
       <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm sm:flex-row">
-        <div className="flex items-center justify-center bg-emerald-50/60 p-6 sm:w-[42%] sm:p-8">
+        <div className="flex items-center justify-center bg-emerald-50/60 p-4 sm:w-[42%] sm:p-8">
           <Image
             src="/team-illustration.png"
             alt="ทีม GM & HR"
@@ -43,17 +43,17 @@ function LoginPageContent() {
             height={1223}
             // Real display width is much smaller than the source, so sizes
             // tells next/image which resized variant to actually serve.
-            sizes="(min-width: 640px) 260px, 220px"
-            className="h-auto w-full max-w-[260px]"
+            sizes="(min-width: 640px) 260px, 150px"
+            className="h-auto w-full max-w-[150px] sm:max-w-[260px]"
             priority
           />
         </div>
 
-        <div className="flex-1 p-8 text-center sm:p-10 sm:text-left">
+        <div className="flex-1 p-6 text-center sm:p-10 sm:text-left">
           <p className="text-4xl">🍃</p>
           <h1 className="mt-2 text-2xl font-bold text-emerald-800">TDFB Expense Tracking</h1>
           <p className="mt-2 text-sm text-zinc-500">
-            ยินดีต้อนรับ! ที่นี่ใช้บันทึกและติดตามค่าใช้จ่าย
+            ยินดีต้อนรับ! บันทึกง่าย ตรวจสอบได้ทุกบิล
             <br />
             เงินสดย่อย / เงินทดรองจ่าย ของทีม
           </p>
