@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { BILLI_DATA_URL } from "./billiAsset";
 
 type BilliMood = "idle" | "scan" | "success";
 type BilliSize = "sm" | "md" | "lg";
@@ -28,7 +28,10 @@ export default function BilliMascot({
 
   return (
     <div className={`billi-mascot billi-mascot--${mood} ${SIZE_CLASS[size]} ${className}`} role="img" aria-label={description}>
-      <Image src="/billi.png" alt="" width={400} height={444} sizes="(max-width: 640px) 96px, 144px" className="h-auto w-full" />
+      {/* The compact embedded PNG avoids a separate request at the small sizes
+          Billi is shown, and keeps the mascot available in every deploy. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={BILLI_DATA_URL} alt="" width={400} height={444} className="h-auto w-full" />
       {mood === "scan" && <span className="billi-mascot__scan-ring" aria-hidden="true" />}
       {mood === "success" && <span className="billi-mascot__spark" aria-hidden="true">✦</span>}
     </div>
