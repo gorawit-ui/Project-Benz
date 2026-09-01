@@ -25,6 +25,7 @@ type FormState = {
   amountBeforeVat: string;
   vatAmount: string;
   grandTotal: string;
+  hasVat: boolean;
 };
 
 type Entry = {
@@ -49,6 +50,7 @@ const emptyForm = (): FormState => ({
   amountBeforeVat: "",
   vatAmount: "",
   grandTotal: "",
+  hasVat: true,
 });
 
 function round2(value: number) {
@@ -74,8 +76,7 @@ function isEntryComplete(entry: Entry) {
       form.supplierNameTh.trim() &&
       form.expenseDetail.trim() &&
       form.odooCategory.trim() &&
-      Number(form.amountBeforeVat) >= 0 &&
-      Number(form.vatAmount) >= 0 &&
+      (!form.hasVat || (Number(form.amountBeforeVat) >= 0 && Number(form.vatAmount) >= 0)) &&
       Number(form.grandTotal) > 0
   );
 }
@@ -91,6 +92,17 @@ function ocrPatch(data: ExtractedReceiptData): Partial<FormState> {
   if (data.amountBeforeVat !== undefined) patch.amountBeforeVat = String(data.amountBeforeVat);
   if (data.vatAmount !== undefined) patch.vatAmount = String(data.vatAmount);
   if (data.grandTotal !== undefined) patch.grandTotal = String(data.grandTotal);
+
+  // A receipt with just one total and no VAT signal (for example a DBD fee)
+  // is not a VAT invoice. Keep the screen simple, while still supplying the
+  // fixed A:Z Sheet columns on save: before VAT = total and VAT = 0.
+  if (data.grandTotal !== undefined && data.amountBeforeVat === undefined && data.vatAmount === undefined) {
+    patch.hasVat = false;
+    patch.amountBeforeVat = String(data.grandTotal);
+    patch.vatAmount = "0";
+  } else if (data.amountBeforeVat !== undefined || data.vatAmount !== undefined) {
+    patch.hasVat = true;
+  }
 
   const vendor = data.supplierNameTh || data.supplierNameEn || "";
   const matched = matchCategoryAndAccName(vendor, data.expenseDetail || "");
@@ -172,6 +184,30 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
     update(key, { amountBeforeVat: value, vatAmount: String(vat), grandTotal: String(round2(numeric + vat)) });
   }
 
+  function updateGrandTotal(key: string, value: string) {
+    setEntries((current) => current.map((entry) => {
+      if (entry.key !== key) return entry;
+      return {
+        ...entry,
+        form: entry.form.hasVat
+          ? { ...entry.form, grandTotal: value }
+          : { ...entry.form, amountBeforeVat: value, vatAmount: "0", grandTotal: value },
+      };
+    }));
+  }
+
+  function setVatEnabled(key: string, hasVat: boolean) {
+    setEntries((current) => current.map((entry) => {
+      if (entry.key !== key) return entry;
+      if (hasVat) return { ...entry, form: { ...entry.form, hasVat: true } };
+      const total = entry.form.grandTotal || entry.form.amountBeforeVat;
+      return {
+        ...entry,
+        form: { ...entry.form, hasVat: false, amountBeforeVat: total, vatAmount: "0", grandTotal: total },
+      };
+    }));
+  }
+
   async function upload(entry: Entry): Promise<string> {
     const payload = new FormData();
     payload.append("file", entry.file);
@@ -194,8 +230,8 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
         body: JSON.stringify({
           items: entries.map((entry, index) => ({
             ...entry.form,
-            amountBeforeVat: Number(entry.form.amountBeforeVat),
-            vatAmount: Number(entry.form.vatAmount),
+            amountBeforeVat: entry.form.hasVat ? Number(entry.form.amountBeforeVat) : Number(entry.form.grandTotal),
+            vatAmount: entry.form.hasVat ? Number(entry.form.vatAmount) : 0,
             grandTotal: Number(entry.form.grandTotal),
             receiptFileLink: receiptFileLinks[index],
           })),
@@ -216,8 +252,11 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
   const completeCount = entries.filter(isEntryComplete).length;
   const incompleteCount = entries.length - completeCount;
   const batchTotal = entries.reduce((sum, entry) => sum + (Number(entry.form.grandTotal) || 0), 0);
+  const ocrCompletedCount = entries.filter((entry) => entry.ocrState !== "loading").length;
+  const ocrCurrentFile = entries.find((entry) => entry.ocrState === "loading")?.file.name;
 
   return (
+    <>
     <PageShell>
       <p className="text-xs font-semibold uppercase tracking-[.18em] text-[var(--brand)]">Batch expense entry</p>
       <h1 className="mt-1 text-2xl font-bold text-[var(--ink)]">ตรวจข้อมูล {entries.length} เอกสารก่อนบันทึก</h1>
@@ -275,17 +314,36 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
               </label>
             </div>
 
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <label className={labelClass}>ก่อน VAT
-                <input required inputMode="decimal" className={inputClass} value={formatMoney(entry.form.amountBeforeVat)} onChange={(e) => updateBeforeVat(entry.key, parseMoney(e.target.value))} />
-              </label>
-              <label className={labelClass}>VAT 7%
-                <input required inputMode="decimal" className={inputClass} value={formatMoney(entry.form.vatAmount)} onChange={(e) => update(entry.key, { vatAmount: parseMoney(e.target.value) })} />
-              </label>
-              <label className={labelClass}>ยอดรวม
-                <input required inputMode="decimal" className={inputClass} value={formatMoney(entry.form.grandTotal)} onChange={(e) => update(entry.key, { grandTotal: parseMoney(e.target.value) })} />
-              </label>
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-subtle)] px-3 py-2.5">
+              <div>
+                <p className="text-xs font-semibold text-[var(--ink)]">เอกสารนี้มี VAT 7%</p>
+                <p className="mt-0.5 text-[11px] text-[var(--muted)]">ปิดได้หากบิลแสดงเพียงยอดสุทธิ</p>
+              </div>
+              <button type="button" role="switch" aria-checked={entry.form.hasVat} aria-label="เอกสารนี้มี VAT 7%" onClick={() => setVatEnabled(entry.key, !entry.form.hasVat)} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${entry.form.hasVat ? "bg-emerald-700" : "bg-slate-300"}`}>
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${entry.form.hasVat ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
             </div>
+
+            {entry.form.hasVat ? (
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <label className={labelClass}>ก่อน VAT
+                  <input required inputMode="decimal" className={inputClass} value={formatMoney(entry.form.amountBeforeVat)} onChange={(e) => updateBeforeVat(entry.key, parseMoney(e.target.value))} />
+                </label>
+                <label className={labelClass}>VAT 7%
+                  <input required inputMode="decimal" className={inputClass} value={formatMoney(entry.form.vatAmount)} onChange={(e) => update(entry.key, { vatAmount: parseMoney(e.target.value) })} />
+                </label>
+                <label className={labelClass}>ยอดรวม
+                  <input required inputMode="decimal" className={inputClass} value={formatMoney(entry.form.grandTotal)} onChange={(e) => updateGrandTotal(entry.key, parseMoney(e.target.value))} />
+                </label>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <label className={labelClass}>ยอดสุทธิ / ยอดรวม
+                  <input required inputMode="decimal" className={inputClass} value={formatMoney(entry.form.grandTotal)} onChange={(e) => updateGrandTotal(entry.key, parseMoney(e.target.value))} />
+                </label>
+                <p className="mt-1 text-[11px] text-[var(--muted)]">ระบบจะบันทึกยอดก่อน VAT เท่ากับยอดสุทธิ และ VAT เป็น 0 บาท</p>
+              </div>
+            )}
 
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className={labelClass}>ประเภทเงิน
@@ -326,5 +384,22 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
         />
       )}
     </PageShell>
+    {ocrCompletedCount < entries.length && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-5 backdrop-blur-sm" role="status" aria-live="polite">
+        <div className="w-full max-w-sm rounded-2xl border border-white/70 bg-white p-6 text-center shadow-2xl">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+            <span className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          </div>
+          <h2 className="mt-4 text-lg font-bold text-[var(--ink)]">กำลังอ่านเอกสาร</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">อ่านแล้ว {ocrCompletedCount} จาก {entries.length} ใบ</p>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-emerald-100" role="progressbar" aria-valuemin={0} aria-valuemax={entries.length} aria-valuenow={ocrCompletedCount}>
+            <div className="h-full rounded-full bg-emerald-700 transition-all duration-500" style={{ width: `${(ocrCompletedCount / entries.length) * 100}%` }} />
+          </div>
+          <p className="mt-4 text-sm text-[var(--ink)]">ระบบกำลังดึงข้อมูลจาก OCR รอสักครู่นะครับ</p>
+          {ocrCurrentFile && <p className="mt-1 truncate text-xs text-[var(--muted)]">{ocrCurrentFile}</p>}
+        </div>
+      </div>
+    )}
+    </>
   );
 }
