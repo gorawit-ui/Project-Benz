@@ -20,16 +20,22 @@ export default function BilliMascot({
   size = "md",
   className = "",
   speech,
+  decorative = false,
 }: {
   mood?: BilliMood;
   size?: BilliSize;
   className?: string;
   speech?: string;
+  /** Use when the surrounding control already supplies the accessible name. */
+  decorative?: boolean;
 }) {
   const description = mood === "scan" ? "น้องบิลลี่กำลังอ่านเอกสาร" : mood === "success" ? "น้องบิลลี่ยินดีด้วย" : "น้องบิลลี่";
 
   return (
-    <div className={`billi-mascot billi-mascot--${mood} ${SIZE_CLASS[size]} ${className}`} role="img" aria-label={description}>
+    <div
+      className={`billi-mascot billi-mascot--${mood} ${SIZE_CLASS[size]} ${className}`}
+      {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": description })}
+    >
       {/* The compact embedded PNG avoids a separate request at the small sizes
           Billi is shown, and keeps the mascot available in every deploy. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
