@@ -4,8 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { getTeamByKey } from "@/lib/teams";
 import { generateReceiptDoc } from "@/lib/receiptDoc";
 import { formatThaiBuddhistDate, formatYyyymmdd } from "@/lib/thaiDate";
-import { uploadReceiptFile, downloadDriveFile } from "@/lib/drive";
-import { updateExpenseRowReceiptDocLink } from "@/lib/sheets";
+import { uploadReceiptFile, downloadDriveFile, copyCashBillEvidenceBundle } from "@/lib/drive";
+import { listExpenseRows, updateExpenseRowReceiptDocLink } from "@/lib/sheets";
 
 // Dedicated Drive subfolder (under the team's driveRootFolderId) that every
 // generated เอกสารรับเงิน gets uploaded into, so it can be found again later.
@@ -116,6 +116,9 @@ export async function POST(req: NextRequest) {
 
         if (expenseRowId && team.sheetId) {
           if (monthTab) {
+            const linkedRow = (await listExpenseRows(session.accessToken, team.sheetId, monthTab)).find(
+              (row) => row.id === expenseRowId
+            );
             await updateExpenseRowReceiptDocLink(
               session.accessToken,
               team.sheetId,
@@ -124,6 +127,29 @@ export async function POST(req: NextRequest) {
               uploaded.webViewLink
             );
             headers["X-Linked-Expense-Id"] = expenseRowId;
+
+            // A cash bill needs the original bill and the receipt document
+            // together for accounting. Copy both into a dedicated folder;
+            // never move them, because the original Drive links must keep
+            // working from the normal expense row and receipt-doc archive.
+            if (linkedRow?.documentType === "บิลเงินสด" && linkedRow.receiptFileLink) {
+              try {
+                const bundle = await copyCashBillEvidenceBundle(
+                  session.accessToken,
+                  team.sheetId,
+                  team.driveRootFolderId,
+                  expenseRowId,
+                  linkedRow.receiptFileLink,
+                  uploaded.fileId
+                );
+                headers["X-Cash-Bill-Bundle-Link"] = bundle.webViewLink;
+              } catch (bundleErr) {
+                console.error("POST /api/receipt-doc: cash-bill bundle failed (non-fatal)", bundleErr);
+                headers["X-Cash-Bill-Bundle-Error"] = encodeURIComponent(
+                  bundleErr instanceof Error ? bundleErr.message : "unknown error"
+                );
+              }
+            }
           } else {
             console.error("POST /api/receipt-doc: no monthTab provided, skipping sheet link-back");
           }
