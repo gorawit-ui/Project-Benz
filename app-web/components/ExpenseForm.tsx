@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import type { DocumentType, ExpenseRow, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { findDuplicateExpense } from "@/lib/duplicateCheck";
@@ -119,6 +120,7 @@ export default function ExpenseForm({
   /** Pre-selected from the capture step (CaptureFlow) — OCR runs on it automatically once, on mount. */
   initialFile?: File | null;
 }) {
+  const router = useRouter();
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   // A draft recovered from a previous session, offered rather than applied —
   // see the DRAFT_KEY block below.
@@ -889,7 +891,7 @@ export default function ExpenseForm({
         <SuccessDialog
           detail="บันทึกรายการลง Google Sheet แล้ว และส่งเข้ารอตรวจเรียบร้อย"
           primaryLabel="ไปที่ Dashboard"
-          onPrimary={() => window.location.assign("/dashboard")}
+          onPrimary={() => router.push("/dashboard")}
           onClose={() => setShowSuccessDialog(false)}
         />
       )}
