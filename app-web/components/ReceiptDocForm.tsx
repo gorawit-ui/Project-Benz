@@ -286,6 +286,11 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <section className="border-b border-zinc-100 pb-5">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700">1</span>
+        <div><h2 className="text-base font-semibold text-zinc-900">ข้อมูลผู้รับเงิน</h2><p className="text-xs text-zinc-500">เลือกชื่อเดิมหรือกรอกข้อมูลของผู้รับเงิน</p></div>
+      </div>
       {/* The saved-payee picker lives ON the name field rather than in a box
           above it: choosing a saved person IS a way of filling this field, and
           a separate control repeated the name and ID immediately below itself. */}
@@ -397,7 +402,13 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
           <p className="mt-1.5 text-xs text-red-600">{templateNotice}</p>
         )}
       </div>
+      </section>
 
+      <section className="border-b border-zinc-100 pb-5">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700">2</span>
+        <div><h2 className="text-base font-semibold text-zinc-900">รายละเอียดเอกสาร</h2><p className="text-xs text-zinc-500">ระบุรายการและยอดเงินให้ตรงกับบิล</p></div>
+      </div>
       <div>
         <label className={labelClass}>ได้รับเงินจากบริษัทเป็นค่า</label>
         <input
@@ -422,7 +433,13 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
         />
         {bahtText && <p className="mt-1 text-sm text-emerald-700">({bahtText})</p>}
       </div>
+      </section>
 
+      <section>
+      <div className="mb-4 flex items-center gap-3">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700">3</span>
+        <div><h2 className="text-base font-semibold text-zinc-900">หลักฐานและบิลเงินสด</h2><p className="text-xs text-zinc-500">แนบรูปบัตรและเลือกบิลเงินสดเพื่อเก็บหลักฐานเป็นชุดเดียวกัน</p></div>
+      </div>
       <div>
         <label className={labelClass}>รูปสำเนาบัตรประชาชน</label>
 
@@ -554,6 +571,7 @@ export default function ReceiptDocForm({ defaultPayeeName }: { defaultPayeeName:
           เมื่อเลือก ระบบจะบันทึกลิงก์เอกสารรับเงินกลับเข้าไปในรายการ และ copy ทั้งบิลเงินสดกับเอกสารรับเงินไว้ในโฟลเดอร์รวมของรายการนั้น
         </p>
       </div>
+      </section>
 
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
