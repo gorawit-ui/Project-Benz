@@ -738,7 +738,7 @@ export default function ExpenseForm({
           <p className="mt-0.5 text-xs text-[var(--muted)]">ปิดได้หากบิลแสดงเพียงยอดสุทธิ</p>
         </div>
         <button type="button" role="switch" aria-checked={form.hasVat} aria-label="เอกสารนี้มี VAT 7%" onClick={() => setVatEnabled(!form.hasVat)} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${form.hasVat ? "bg-[var(--brand)]" : "bg-zinc-300"}`}>
-          <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${form.hasVat ? "translate-x-6" : "translate-x-1"}`} />
+          <span className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${form.hasVat ? "translate-x-5" : "translate-x-0"}`} />
         </button>
       </div>
       {form.hasVat ? (
