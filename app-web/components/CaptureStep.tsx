@@ -14,15 +14,15 @@ export default function CaptureStep({
   onFileSelected,
   onSkip,
 }: {
-  onFileSelected: (file: File) => void;
+  onFileSelected: (files: File[]) => void;
   onSkip: () => void;
 }) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) onFileSelected(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) onFileSelected(files);
     e.target.value = "";
   }
 
@@ -87,6 +87,7 @@ export default function CaptureStep({
         <input
           ref={cameraInputRef}
           type="file"
+          multiple
           accept="image/*"
           capture="environment"
           className="hidden"
@@ -96,13 +97,14 @@ export default function CaptureStep({
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           accept="image/jpeg,image/png,application/pdf"
           className="hidden"
           onChange={handleChange}
         />
       </div>
 
-      <p className="mt-4 text-center text-xs leading-5 text-[var(--muted)]">รองรับ JPEG, PNG และ PDF · รูปจะใช้เพื่ออ่านข้อมูลและแนบกับรายการนี้</p>
+      <p className="mt-4 text-center text-xs leading-5 text-[var(--muted)]">รองรับ JPEG, PNG และ PDF · เลือกหลายไฟล์ได้ และจะได้ตรวจข้อมูล OCR ของแต่ละบิลก่อนบันทึก</p>
       </Surface>
 
       <ActionButton
