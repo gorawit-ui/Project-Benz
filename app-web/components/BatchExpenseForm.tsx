@@ -320,7 +320,7 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
                 <p className="mt-0.5 text-[11px] text-[var(--muted)]">ปิดได้หากบิลแสดงเพียงยอดสุทธิ</p>
               </div>
               <button type="button" role="switch" aria-checked={entry.form.hasVat} aria-label="เอกสารนี้มี VAT 7%" onClick={() => setVatEnabled(entry.key, !entry.form.hasVat)} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${entry.form.hasVat ? "bg-emerald-700" : "bg-slate-300"}`}>
-                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${entry.form.hasVat ? "translate-x-6" : "translate-x-1"}`} />
+                <span className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${entry.form.hasVat ? "translate-x-5" : "translate-x-0"}`} />
               </button>
             </div>
 
