@@ -256,18 +256,59 @@ export interface OcrResult {
  * transient — the same file reads fine seconds later. A single attempt
  * turned that into "OCR is broken" and dumped the user into manual entry.
  *
- * Deliberately excludes 400 (bad request), 401/403 (auth) and 404 (no such
- * model): retrying those just burns the user's time on a certain failure.
+ * Excludes 400 (bad request), 401/403 (auth) and 404 (no such model):
+ * retrying those just burns the user's time on a certain failure.
+ *
+ * 429 is excluded too, which is less obvious. A quota rejection is either
+ * per-day (retrying is hopeless) or per-minute — and a per-minute window
+ * only clears after ~60s, which is longer than this whole request is
+ * allowed to live (see RETRY_BUDGET_MS). So a retry cannot outlast it
+ * either way, and every extra attempt spends more of the very quota that
+ * is already exhausted. Better to fail fast and let the user press
+ * "อ่านใหม่อีกครั้ง" when they choose.
  */
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
-const MAX_ATTEMPTS = 3;
+const RETRYABLE_STATUSES = new Set([500, 502, 503, 504]);
+const MAX_ATTEMPTS = 4;
+/** Backoff before attempts 2, 3 and 4 — deliberately patient, since an overloaded model often needs ~10s to free up. */
+const RETRY_DELAYS_MS = [2000, 5000, 10_000];
 /**
- * Wall-clock ceiling for all attempts combined. The route allows 60s
- * (maxDuration), so this leaves headroom to still return a real error
- * instead of being killed mid-retry — being killed is what produced an
- * unexplained failure in the first place.
+ * Wall-clock ceiling for all attempts combined.
+ *
+ * Sized against the route's 60s maxDuration, NOT equal to it: the budget
+ * only gates whether another attempt may *start*, and says nothing about
+ * how long that attempt then takes. Leaving 30s of headroom means even a
+ * slow final call lands inside 60s. Letting the retries creep closer to the
+ * ceiling would resurrect the original bug — a request killed mid-flight,
+ * answered with an HTML 504 the form could not explain.
  */
-const RETRY_BUDGET_MS = 40_000;
+const RETRY_BUDGET_MS = 30_000;
+
+export interface RetryDecision {
+  retry: boolean;
+  delayMs: number;
+}
+
+/**
+ * Whether a failed attempt should be tried again, and after how long.
+ *
+ * Pulled out as a pure function so all three rules — status, attempt count
+ * and time budget — are testable without calling Gemini.
+ */
+export function retryDecision(
+  status: number | undefined,
+  attempt: number,
+  elapsedMs: number,
+  jitter = Math.random()
+): RetryDecision {
+  const delayMs = Math.round((RETRY_DELAYS_MS[attempt - 1] ?? 0) * (1 + jitter * 0.3));
+  const retry =
+    attempt < MAX_ATTEMPTS &&
+    status !== undefined &&
+    RETRYABLE_STATUSES.has(status) &&
+    // Only start another attempt if there is room to finish it in budget.
+    elapsedMs + delayMs < RETRY_BUDGET_MS;
+  return { retry, delayMs };
+}
 
 /** Pulls the upstream HTTP status out of whatever shape the SDK threw. */
 export function upstreamStatusFrom(err: unknown): number | undefined {
@@ -281,11 +322,6 @@ export function upstreamStatusFrom(err: unknown): number | undefined {
   const raw = err instanceof Error ? err.message : String(err);
   const match = /"code"\s*:\s*(\d{3})/.exec(raw);
   return match ? Number(match[1]) : undefined;
-}
-
-/** Backoff with jitter, so a batch's retries don't all land on the same instant. */
-function retryDelayMs(attempt: number): number {
-  return Math.round(1000 * 2 ** (attempt - 1) * (1 + Math.random() * 0.3));
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -342,19 +378,12 @@ export async function extractReceiptData(fileBuffer: Buffer, mimeType: string): 
         break;
       } catch (err) {
         const status = upstreamStatusFrom(err);
-        const delay = retryDelayMs(attempt);
-        const canRetry =
-          attempt < MAX_ATTEMPTS &&
-          status !== undefined &&
-          RETRYABLE_STATUSES.has(status) &&
-          // Only start another attempt if there's room to finish it inside
-          // the route's own time budget.
-          Date.now() - startedAt + delay < RETRY_BUDGET_MS;
-        if (!canRetry) throw err;
+        const { retry, delayMs } = retryDecision(status, attempt, Date.now() - startedAt);
+        if (!retry) throw err;
         console.warn(
-          `extractReceiptData: ${status} from Gemini, retrying (attempt ${attempt + 1}/${MAX_ATTEMPTS}) in ${delay}ms`
+          `extractReceiptData: ${status} from Gemini, retrying (attempt ${attempt + 1}/${MAX_ATTEMPTS}) in ${delayMs}ms`
         );
-        await sleep(delay);
+        await sleep(delayMs);
       }
     }
 

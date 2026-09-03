@@ -152,6 +152,11 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState<number | null>(null);
+  // A batch whose reads keep hitting an overloaded Gemini is retried with
+  // backoff per file, so the overlay can legitimately stay up for minutes on
+  // a large batch. Let it be dismissed — reading carries on behind it, and
+  // every entry is editable anyway.
+  const [ocrOverlayDismissed, setOcrOverlayDismissed] = useState(false);
 
   useEffect(() => {
     // Same per-file request and state transitions as before — only the
@@ -410,11 +415,12 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
         />
       )}
     </PageShell>
-    {ocrCompletedCount < entries.length && (
+    {ocrCompletedCount < entries.length && !ocrOverlayDismissed && (
       <OcrProgressOverlay
         completed={ocrCompletedCount}
         total={entries.length}
         currentFileName={ocrCurrentFile}
+        onDismiss={() => setOcrOverlayDismissed(true)}
       />
     )}
     </>

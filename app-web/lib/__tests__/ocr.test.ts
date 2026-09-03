@@ -8,7 +8,7 @@
  * real, current option, rather than trusting the model's JSON blindly.
  */
 import { describe, it, expect } from "vitest";
-import { sanitize, extractReceiptData, upstreamStatusFrom } from "../ocr";
+import { sanitize, extractReceiptData, upstreamStatusFrom, retryDecision } from "../ocr";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS } from "../categoryMapping";
 
 describe("sanitize", () => {
@@ -74,5 +74,50 @@ describe("upstreamStatusFrom", () => {
 
   it("returns undefined when there is no status to find, so it is not retried blindly", () => {
     expect(upstreamStatusFrom(new Error("socket hang up"))).toBeUndefined();
+  });
+});
+
+describe("retryDecision", () => {
+  // jitter is pinned to 0 so the delays are the documented base values.
+  const decide = (status: number | undefined, attempt: number, elapsedMs: number) =>
+    retryDecision(status, attempt, elapsedMs, 0);
+
+  it("retries an overloaded model with a patient, growing backoff", () => {
+    expect(decide(503, 1, 0)).toEqual({ retry: true, delayMs: 2000 });
+    expect(decide(503, 2, 5000)).toEqual({ retry: true, delayMs: 5000 });
+    expect(decide(503, 3, 12000)).toEqual({ retry: true, delayMs: 10000 });
+  });
+
+  it("stops after the last attempt", () => {
+    expect(decide(503, 4, 1000).retry).toBe(false);
+  });
+
+  it("never retries a quota rejection", () => {
+    // A per-minute window needs ~60s to clear, which outlives the whole
+    // request; a per-day one never clears. Either way a retry only spends
+    // more of the quota that is already exhausted.
+    expect(decide(429, 1, 0).retry).toBe(false);
+  });
+
+  it("never retries a failure that cannot succeed on a second try", () => {
+    for (const status of [400, 401, 403, 404]) {
+      expect(decide(status, 1, 0).retry).toBe(false);
+    }
+  });
+
+  it("does not retry when the status could not be identified", () => {
+    expect(decide(undefined, 1, 0).retry).toBe(false);
+  });
+
+  it("refuses a retry that would not fit the time budget", () => {
+    // The guard that keeps a retry from running past the route's 60s
+    // maxDuration and being killed mid-flight — the original bug.
+    expect(decide(503, 3, 25_000)).toEqual({ retry: false, delayMs: 10000 });
+  });
+
+  it("keeps the whole retry window well inside the route's 60s ceiling", () => {
+    // Worst case: every attempt fails and every backoff is served in full.
+    const totalBackoff = [1, 2, 3].reduce((sum, attempt) => sum + decide(503, attempt, 0).delayMs, 0);
+    expect(totalBackoff).toBeLessThan(30_000);
   });
 });
