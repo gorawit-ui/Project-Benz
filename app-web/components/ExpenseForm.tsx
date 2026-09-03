@@ -351,12 +351,12 @@ export default function ExpenseForm({
         throw new Error(json.error || ocrHttpErrorMessage(res.status));
       }
       const data = (json.data ?? {}) as ExtractedReceiptData;
-      const failure = json.failure as { code: string; detail: string } | undefined;
+      const failure = json.failure as { code: string; detail: string; status?: number } | undefined;
       applyExtractedData(data);
       if (failure) {
         // The read failed outright — saying "อ่านข้อมูลแล้ว" over an empty
         // form is how a completely broken OCR call stayed invisible.
-        throw new Error(ocrFailureMessage(failure.code, failure.detail));
+        throw new Error(ocrFailureMessage(failure.code, failure.detail, failure.status));
       }
       const filledCount = Object.keys(data).filter((key) => key !== "confidence").length;
       setOcrMessage(
@@ -871,7 +871,7 @@ export default function ExpenseForm({
         )}
 
         {ocrMessage && (
-          <p
+          <div
             className={`mt-2 rounded-md px-3 py-2 text-xs ${
               ocrMessage.type === "success"
                 ? "bg-emerald-50 text-emerald-800"
@@ -880,8 +880,20 @@ export default function ExpenseForm({
                   : "bg-red-50 text-red-700"
             }`}
           >
-            {ocrMessage.text}
-          </p>
+            <p>{ocrMessage.text}</p>
+            {/* Gemini's busiest failures are transient, so the file is still
+                attached and worth another go — without this the only way to
+                retry was to re-pick the file. */}
+            {ocrMessage.type !== "success" && receiptFile && !ocrLoading && (
+              <button
+                type="button"
+                onClick={() => void runOcr(receiptFile)}
+                className="mt-2 rounded-md border border-current px-2.5 py-1 font-semibold hover:bg-white/60"
+              >
+                อ่านใหม่อีกครั้ง
+              </button>
+            )}
+          </div>
         )}
       </section>
 

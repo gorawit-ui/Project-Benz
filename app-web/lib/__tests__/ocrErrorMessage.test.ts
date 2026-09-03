@@ -54,3 +54,20 @@ describe("ocrFailureMessage", () => {
     }
   });
 });
+
+describe("ocrFailureMessage transient upstream statuses", () => {
+  it("explains a 503 as temporary load, not as a broken system", () => {
+    const message = ocrFailureMessage("api_error", '{"error":{"code":503}}', 503);
+    expect(message).toContain("หนาแน่น");
+    // The raw API body must not be dumped on someone holding a receipt.
+    expect(message).not.toContain("{");
+  });
+
+  it("keeps 429 quota wording distinct from 503 load wording", () => {
+    expect(ocrFailureMessage("api_error", "", 429)).not.toBe(ocrFailureMessage("api_error", "", 503));
+  });
+
+  it("still shows the raw detail for statuses that need diagnosing", () => {
+    expect(ocrFailureMessage("api_error", "404 model gone", 404)).toContain("404 model gone");
+  });
+});

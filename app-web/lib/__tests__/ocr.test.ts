@@ -8,7 +8,7 @@
  * real, current option, rather than trusting the model's JSON blindly.
  */
 import { describe, it, expect } from "vitest";
-import { sanitize, extractReceiptData } from "../ocr";
+import { sanitize, extractReceiptData, upstreamStatusFrom } from "../ocr";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS } from "../categoryMapping";
 
 describe("sanitize", () => {
@@ -55,5 +55,24 @@ describe("extractReceiptData failure reporting", () => {
     expect(result.data).toEqual({});
     expect(JSON.stringify(result)).not.toMatch(/AIza[0-9A-Za-z_-]{10,}/);
     expect(JSON.stringify(result)).not.toMatch(/key=[^*]/);
+  });
+});
+
+describe("upstreamStatusFrom", () => {
+  it("reads the code out of the API body the SDK stringifies into the message", () => {
+    // The exact shape seen in production when Gemini was overloaded — this is
+    // what decides whether the call gets retried instead of failing outright.
+    const err = new Error(
+      '{"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}'
+    );
+    expect(upstreamStatusFrom(err)).toBe(503);
+  });
+
+  it("prefers a numeric status property when the SDK provides one", () => {
+    expect(upstreamStatusFrom({ status: 429 })).toBe(429);
+  });
+
+  it("returns undefined when there is no status to find, so it is not retried blindly", () => {
+    expect(upstreamStatusFrom(new Error("socket hang up"))).toBeUndefined();
   });
 });

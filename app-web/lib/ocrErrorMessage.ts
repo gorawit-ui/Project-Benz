@@ -17,7 +17,17 @@
  * form, so the detail is deliberately included: without it there is no way
  * to tell a missing API key from a dead model name from a quota block.
  */
-export function ocrFailureMessage(code: string, detail: string): string {
+export function ocrFailureMessage(code: string, detail: string, status?: number): string {
+  // The transient upstream cases get their own plain-language wording: these
+  // are worth retrying, and dumping a raw JSON error body on someone holding
+  // a receipt tells them nothing about what to do next.
+  if (status === 503 || status === 500 || status === 502) {
+    return "ระบบ AI อ่านบิลมีผู้ใช้งานหนาแน่นชั่วคราว — ลองกด “อ่านใหม่อีกครั้ง” ได้เลย หรือกรอกข้อมูลเอง";
+  }
+  if (status === 429) {
+    return "ระบบอ่านบิลใช้งานเกินโควตาช่วงนี้ — รอสักครู่แล้วลองใหม่ หรือกรอกข้อมูลเอง";
+  }
+
   const base =
     code === "missing_api_key"
       ? "ระบบอ่านบิลยังไม่ได้ตั้งค่า API key"

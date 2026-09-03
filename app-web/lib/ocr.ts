@@ -246,8 +246,49 @@ export interface OcrResult {
    * the form cheerfully reported "อ่านข้อมูลจากใบเสร็จแล้ว" over a blank
    * form), which is exactly how a totally broken OCR call went unnoticed.
    */
-  failure?: { code: OcrFailureCode; detail: string };
+  failure?: { code: OcrFailureCode; detail: string; status?: number };
 }
+
+/**
+ * Upstream statuses worth trying again. 503 UNAVAILABLE is the one that
+ * actually bit us: Gemini answers "this model is currently experiencing high
+ * demand" when it's busy (free-tier traffic is shed first), which is
+ * transient — the same file reads fine seconds later. A single attempt
+ * turned that into "OCR is broken" and dumped the user into manual entry.
+ *
+ * Deliberately excludes 400 (bad request), 401/403 (auth) and 404 (no such
+ * model): retrying those just burns the user's time on a certain failure.
+ */
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+/**
+ * Wall-clock ceiling for all attempts combined. The route allows 60s
+ * (maxDuration), so this leaves headroom to still return a real error
+ * instead of being killed mid-retry — being killed is what produced an
+ * unexplained failure in the first place.
+ */
+const RETRY_BUDGET_MS = 40_000;
+
+/** Pulls the upstream HTTP status out of whatever shape the SDK threw. */
+export function upstreamStatusFrom(err: unknown): number | undefined {
+  if (err && typeof err === "object") {
+    const maybe = err as { status?: unknown; code?: unknown };
+    if (typeof maybe.status === "number") return maybe.status;
+    if (typeof maybe.code === "number") return maybe.code;
+  }
+  // The SDK commonly stringifies the API's own body into the message, e.g.
+  // {"error":{"code":503,"message":"...","status":"UNAVAILABLE"}}
+  const raw = err instanceof Error ? err.message : String(err);
+  const match = /"code"\s*:\s*(\d{3})/.exec(raw);
+  return match ? Number(match[1]) : undefined;
+}
+
+/** Backoff with jitter, so a batch's retries don't all land on the same instant. */
+function retryDelayMs(attempt: number): number {
+  return Math.round(1000 * 2 ** (attempt - 1) * (1 + Math.random() * 0.3));
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Redacts anything key-shaped before an upstream error message is allowed
@@ -277,9 +318,10 @@ export async function extractReceiptData(fileBuffer: Buffer, mimeType: string): 
     return { data: {}, failure: { code: "missing_api_key", detail: "GEMINI_API_KEY is not configured" } };
   }
 
+  const startedAt = Date.now();
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
+    const request = {
       model: MODEL,
       contents: [
         {
@@ -291,7 +333,30 @@ export async function extractReceiptData(fileBuffer: Buffer, mimeType: string): 
         responseMimeType: "application/json",
         responseSchema: RESPONSE_SCHEMA,
       },
-    });
+    };
+
+    let response;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        response = await ai.models.generateContent(request);
+        break;
+      } catch (err) {
+        const status = upstreamStatusFrom(err);
+        const delay = retryDelayMs(attempt);
+        const canRetry =
+          attempt < MAX_ATTEMPTS &&
+          status !== undefined &&
+          RETRYABLE_STATUSES.has(status) &&
+          // Only start another attempt if there's room to finish it inside
+          // the route's own time budget.
+          Date.now() - startedAt + delay < RETRY_BUDGET_MS;
+        if (!canRetry) throw err;
+        console.warn(
+          `extractReceiptData: ${status} from Gemini, retrying (attempt ${attempt + 1}/${MAX_ATTEMPTS}) in ${delay}ms`
+        );
+        await sleep(delay);
+      }
+    }
 
     const text = response.text;
     if (!text) {
@@ -310,6 +375,9 @@ export async function extractReceiptData(fileBuffer: Buffer, mimeType: string): 
     return { data: sanitize(parsed) };
   } catch (err) {
     console.error("extractReceiptData: Gemini API call failed", err);
-    return { data: {}, failure: { code: "api_error", detail: safeErrorDetail(err) } };
+    return {
+      data: {},
+      failure: { code: "api_error", detail: safeErrorDetail(err), status: upstreamStatusFrom(err) },
+    };
   }
 }

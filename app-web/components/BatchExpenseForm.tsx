@@ -169,8 +169,8 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
           const res = await fetch("/api/ocr", { method: "POST", body: payload });
           const json = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(json.error || ocrHttpErrorMessage(res.status));
-          const failure = json.failure as { code: string; detail: string } | undefined;
-          if (failure) throw new Error(ocrFailureMessage(failure.code, failure.detail));
+          const failure = json.failure as { code: string; detail: string; status?: number } | undefined;
+          if (failure) throw new Error(ocrFailureMessage(failure.code, failure.detail, failure.status));
           const data = (json.data ?? {}) as ExtractedReceiptData;
           setEntries((current) => current.map((item) =>
             item.key === entry.key
