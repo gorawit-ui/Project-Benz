@@ -11,6 +11,7 @@ import { ocrFailureMessage, ocrHttpErrorMessage } from "@/lib/ocrErrorMessage";
 import ComboBox from "./ComboBox";
 import { ActionButton, SectionHeading } from "./ui";
 import BilliMascot from "./BilliMascot";
+import OcrProgressOverlay from "./OcrProgressOverlay";
 import SuccessDialog from "./SuccessDialog";
 
 const DOCUMENT_TYPES: DocumentType[] = [
@@ -137,6 +138,9 @@ export default function ExpenseForm({
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrMessage, setOcrMessage] = useState<OcrMessage | null>(null);
+  // The reading overlay is dismissable (see OcrProgressOverlay) — this only
+  // hides it, OCR keeps running and still fills the form when it lands.
+  const [ocrOverlayDismissed, setOcrOverlayDismissed] = useState(false);
 
   // เงินสดย่อย vs เงินทดรองจ่าย auto-classification (see lib/pettyCash.ts) —
   // fundTypeTouched flips true the moment the user clicks a fund-type button
@@ -339,6 +343,7 @@ export default function ExpenseForm({
 
   async function runOcr(file: File) {
     setOcrLoading(true);
+    setOcrOverlayDismissed(false); // a fresh read gets the overlay again, even after a dismissed one
     setOcrMessage(null);
     try {
       const body = new FormData();
@@ -951,6 +956,15 @@ export default function ExpenseForm({
           primaryLabel="ไปที่ Dashboard"
           onPrimary={() => router.push("/dashboard")}
           onClose={() => setShowSuccessDialog(false)}
+        />
+      )}
+
+      {/* Same overlay the multi-file flow uses — one receipt used to get only
+          a thin strip inside the attachment box, which was easy to miss. */}
+      {ocrLoading && !ocrOverlayDismissed && (
+        <OcrProgressOverlay
+          currentFileName={receiptFile?.name}
+          onDismiss={() => setOcrOverlayDismissed(true)}
         />
       )}
     </form>
