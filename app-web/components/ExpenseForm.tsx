@@ -7,7 +7,7 @@ import type { ExtractedReceiptData } from "@/lib/ocr";
 import { findDuplicateExpense } from "@/lib/duplicateCheck";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS, getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
 import { prepareImageForOcr } from "@/lib/imageForOcr";
-import { ocrHttpErrorMessage } from "@/lib/ocrErrorMessage";
+import { ocrFailureMessage, ocrHttpErrorMessage } from "@/lib/ocrErrorMessage";
 import ComboBox from "./ComboBox";
 import { ActionButton, SectionHeading } from "./ui";
 import BilliMascot from "./BilliMascot";
@@ -351,11 +351,20 @@ export default function ExpenseForm({
         throw new Error(json.error || ocrHttpErrorMessage(res.status));
       }
       const data = (json.data ?? {}) as ExtractedReceiptData;
+      const failure = json.failure as { code: string; detail: string } | undefined;
       applyExtractedData(data);
+      if (failure) {
+        // The read failed outright — saying "อ่านข้อมูลแล้ว" over an empty
+        // form is how a completely broken OCR call stayed invisible.
+        throw new Error(ocrFailureMessage(failure.code, failure.detail));
+      }
+      const filledCount = Object.keys(data).filter((key) => key !== "confidence").length;
       setOcrMessage(
-        data.confidence === "low"
-          ? { type: "warning", text: "อ่านข้อมูลได้ไม่ชัดเจน กรุณาตรวจสอบให้ละเอียด" }
-          : { type: "success", text: "อ่านข้อมูลจากใบเสร็จแล้ว ตรวจสอบและแก้ไขได้ก่อนบันทึก" }
+        filledCount === 0
+          ? { type: "warning", text: "อ่านเอกสารนี้ไม่พบข้อมูลที่ใช้ได้ — กรอกข้อมูลเองได้เลย" }
+          : data.confidence === "low"
+            ? { type: "warning", text: "อ่านข้อมูลได้ไม่ชัดเจน กรุณาตรวจสอบให้ละเอียด" }
+            : { type: "success", text: "อ่านข้อมูลจากใบเสร็จแล้ว ตรวจสอบและแก้ไขได้ก่อนบันทึก" }
       );
     } catch (err) {
       // OCR failing must never block the flow — the file stays attached and

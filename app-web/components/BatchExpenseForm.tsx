@@ -7,7 +7,7 @@ import type { ExtractedReceiptData } from "@/lib/ocr";
 import { getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
 import { runWithConcurrency } from "@/lib/concurrency";
 import { prepareImageForOcr } from "@/lib/imageForOcr";
-import { ocrHttpErrorMessage } from "@/lib/ocrErrorMessage";
+import { ocrFailureMessage, ocrHttpErrorMessage } from "@/lib/ocrErrorMessage";
 import { ActionButton, PageShell, SectionHeading, Surface } from "./ui";
 import BilliMascot from "./BilliMascot";
 import SuccessDialog from "./SuccessDialog";
@@ -169,6 +169,8 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
           const res = await fetch("/api/ocr", { method: "POST", body: payload });
           const json = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(json.error || ocrHttpErrorMessage(res.status));
+          const failure = json.failure as { code: string; detail: string } | undefined;
+          if (failure) throw new Error(ocrFailureMessage(failure.code, failure.detail));
           const data = (json.data ?? {}) as ExtractedReceiptData;
           setEntries((current) => current.map((item) =>
             item.key === entry.key

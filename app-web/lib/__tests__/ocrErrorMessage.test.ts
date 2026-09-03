@@ -5,7 +5,7 @@
  * Each case must stay distinguishable from the others.
  */
 import { describe, it, expect } from "vitest";
-import { ocrHttpErrorMessage } from "../ocrErrorMessage";
+import { ocrFailureMessage, ocrHttpErrorMessage } from "../ocrErrorMessage";
 
 describe("ocrHttpErrorMessage", () => {
   it("names the size limit for a 413", () => {
@@ -31,5 +31,26 @@ describe("ocrHttpErrorMessage", () => {
   it("gives every mapped status a distinct message", () => {
     const messages = [413, 429, 504, 401, 500].map(ocrHttpErrorMessage);
     expect(new Set(messages).size).toBe(messages.length);
+  });
+});
+
+describe("ocrFailureMessage", () => {
+  it("names a missing API key distinctly from an API error", () => {
+    const missing = ocrFailureMessage("missing_api_key", "GEMINI_API_KEY is not configured");
+    const apiError = ocrFailureMessage("api_error", "404 model not found");
+    expect(missing).toContain("API key");
+    expect(apiError).not.toBe(missing);
+  });
+
+  it("carries the upstream detail through so the cause is visible", () => {
+    // Without the detail there is no way to tell a dead model name from a
+    // quota block — both previously showed as a green success.
+    expect(ocrFailureMessage("api_error", "404 model gemini-x not found")).toContain("gemini-x");
+  });
+
+  it("always tells the user they can still type it in themselves", () => {
+    for (const code of ["missing_api_key", "api_error", "empty_response", "bad_json", "weird"]) {
+      expect(ocrFailureMessage(code, "")).toContain("กรอกข้อมูลเอง");
+    }
   });
 });

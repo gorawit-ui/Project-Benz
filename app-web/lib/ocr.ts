@@ -234,17 +234,47 @@ export function sanitize(raw: unknown): ExtractedReceiptData {
   return Object.fromEntries(Object.entries(result).filter(([, v]) => v !== undefined)) as ExtractedReceiptData;
 }
 
+/** Why an OCR attempt produced nothing, when it produced nothing for a reason. */
+export type OcrFailureCode = "missing_api_key" | "api_error" | "empty_response" | "bad_json";
+
+export interface OcrResult {
+  data: ExtractedReceiptData;
+  /**
+   * Set ONLY when extraction failed outright. A successful read that simply
+   * couldn't find any fields leaves this undefined with empty `data` — the
+   * two used to be indistinguishable (every failure collapsed to `{}` and
+   * the form cheerfully reported "อ่านข้อมูลจากใบเสร็จแล้ว" over a blank
+   * form), which is exactly how a totally broken OCR call went unnoticed.
+   */
+  failure?: { code: OcrFailureCode; detail: string };
+}
+
+/**
+ * Redacts anything key-shaped before an upstream error message is allowed
+ * anywhere near a response body: Google's client can embed the request URL
+ * (which carries `?key=…`) in its error text, and that must never reach the
+ * browser or a log the user can screenshot.
+ */
+function safeErrorDetail(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw
+    .replace(/key=[^&\s"']+/gi, "key=***")
+    .replace(/AIza[0-9A-Za-z_-]{10,}/g, "***")
+    .slice(0, 300);
+}
+
 /**
  * Reads a photographed/scanned Thai receipt and extracts the fields
  * ExpenseForm needs to prefill itself. Never throws — any failure (missing
- * API key, network/API error, malformed model output) resolves to `{}` so
- * the caller can fall back to manual entry.
+ * API key, network/API error, malformed model output) comes back as an
+ * `OcrResult` with `failure` set, so the caller can both fall back to manual
+ * entry AND tell the user what actually went wrong.
  */
-export async function extractReceiptData(fileBuffer: Buffer, mimeType: string): Promise<ExtractedReceiptData> {
+export async function extractReceiptData(fileBuffer: Buffer, mimeType: string): Promise<OcrResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error("extractReceiptData: GEMINI_API_KEY is not set, skipping OCR");
-    return {};
+    return { data: {}, failure: { code: "missing_api_key", detail: "GEMINI_API_KEY is not configured" } };
   }
 
   try {
@@ -266,7 +296,7 @@ export async function extractReceiptData(fileBuffer: Buffer, mimeType: string): 
     const text = response.text;
     if (!text) {
       console.error("extractReceiptData: empty response from Gemini");
-      return {};
+      return { data: {}, failure: { code: "empty_response", detail: `model ${MODEL} returned no text` } };
     }
 
     let parsed: unknown;
@@ -274,12 +304,12 @@ export async function extractReceiptData(fileBuffer: Buffer, mimeType: string): 
       parsed = JSON.parse(text);
     } catch (err) {
       console.error("extractReceiptData: failed to parse Gemini JSON response", err);
-      return {};
+      return { data: {}, failure: { code: "bad_json", detail: safeErrorDetail(err) } };
     }
 
-    return sanitize(parsed);
+    return { data: sanitize(parsed) };
   } catch (err) {
     console.error("extractReceiptData: Gemini API call failed", err);
-    return {};
+    return { data: {}, failure: { code: "api_error", detail: safeErrorDetail(err) } };
   }
 }

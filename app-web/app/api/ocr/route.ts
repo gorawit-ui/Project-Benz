@@ -42,8 +42,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const data = await extractReceiptData(buffer, mimeType);
-    return NextResponse.json({ data });
+    const { data, failure } = await extractReceiptData(buffer, mimeType);
+    // Still a 200 — a failed read must never block manual entry — but the
+    // reason travels with it so the form can say "อ่านไม่สำเร็จ" instead of
+    // reporting success over an empty form.
+    return NextResponse.json({ data, failure });
   } catch (err) {
     console.error("POST /api/ocr failed", err);
     return NextResponse.json({ error: "อ่านข้อมูลจากใบเสร็จไม่สำเร็จ กรุณากรอกข้อมูลเอง" }, { status: 500 });

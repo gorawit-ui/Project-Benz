@@ -8,7 +8,7 @@
  * real, current option, rather than trusting the model's JSON blindly.
  */
 import { describe, it, expect } from "vitest";
-import { sanitize } from "../ocr";
+import { sanitize, extractReceiptData } from "../ocr";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS } from "../categoryMapping";
 
 describe("sanitize", () => {
@@ -39,5 +39,21 @@ describe("sanitize", () => {
     const result = sanitize({ documentType: "ใบเสร็จรับเงิน" });
     expect("suggestedCategory" in result).toBe(false);
     expect("suggestedAccName" in result).toBe(false);
+  });
+});
+
+describe("extractReceiptData failure reporting", () => {
+  it("never lets an API key reach the failure detail", async () => {
+    // The detail is surfaced in the browser, so a Google client error that
+    // embeds the request URL (…?key=AIza…) must come back redacted.
+    const previous = process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    const result = await extractReceiptData(Buffer.from(""), "image/jpeg");
+    if (previous !== undefined) process.env.GEMINI_API_KEY = previous;
+
+    expect(result.failure?.code).toBe("missing_api_key");
+    expect(result.data).toEqual({});
+    expect(JSON.stringify(result)).not.toMatch(/AIza[0-9A-Za-z_-]{10,}/);
+    expect(JSON.stringify(result)).not.toMatch(/key=[^*]/);
   });
 });
