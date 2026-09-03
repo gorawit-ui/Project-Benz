@@ -6,6 +6,8 @@ import type { DocumentType, ExpenseRow, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { findDuplicateExpense } from "@/lib/duplicateCheck";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS, getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
+import { prepareImageForOcr } from "@/lib/imageForOcr";
+import { ocrHttpErrorMessage } from "@/lib/ocrErrorMessage";
 import ComboBox from "./ComboBox";
 import { ActionButton, SectionHeading } from "./ui";
 import BilliMascot from "./BilliMascot";
@@ -340,11 +342,13 @@ export default function ExpenseForm({
     setOcrMessage(null);
     try {
       const body = new FormData();
-      body.append("file", file);
+      // Only the OCR copy is shrunk — receiptFile (the original) is what
+      // still goes to Drive on submit. See lib/imageForOcr.ts.
+      body.append("file", await prepareImageForOcr(file));
       const res = await fetch("/api/ocr", { method: "POST", body });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(json.error || "อ่านข้อมูลจากใบเสร็จไม่สำเร็จ");
+        throw new Error(json.error || ocrHttpErrorMessage(res.status));
       }
       const data = (json.data ?? {}) as ExtractedReceiptData;
       applyExtractedData(data);

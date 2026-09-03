@@ -5,6 +5,9 @@ import { getTeamByKey } from "@/lib/teams";
 import { uploadReceiptFile } from "@/lib/drive";
 import { formatThaiMonthLabel } from "@/lib/month";
 
+/** Uploading a multi-MB receipt photo to Drive can outrun Vercel's 10s default. */
+export const maxDuration = 60;
+
 function extensionForMimeType(mimeType: string): string {
   switch (mimeType) {
     case "image/png":

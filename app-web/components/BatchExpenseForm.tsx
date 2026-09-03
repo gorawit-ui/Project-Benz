@@ -6,6 +6,8 @@ import type { DocumentType, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
 import { runWithConcurrency } from "@/lib/concurrency";
+import { prepareImageForOcr } from "@/lib/imageForOcr";
+import { ocrHttpErrorMessage } from "@/lib/ocrErrorMessage";
 import { ActionButton, PageShell, SectionHeading, Surface } from "./ui";
 import BilliMascot from "./BilliMascot";
 import SuccessDialog from "./SuccessDialog";
@@ -161,10 +163,12 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
       async (entry) => {
         try {
           const payload = new FormData();
-          payload.append("file", entry.file);
+          // Only the OCR copy is shrunk — entry.file (the original) is what
+          // still goes to Drive on submit. See lib/imageForOcr.ts.
+          payload.append("file", await prepareImageForOcr(entry.file));
           const res = await fetch("/api/ocr", { method: "POST", body: payload });
           const json = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(json.error || "อ่านข้อมูลไม่ได้");
+          if (!res.ok) throw new Error(json.error || ocrHttpErrorMessage(res.status));
           const data = (json.data ?? {}) as ExtractedReceiptData;
           setEntries((current) => current.map((item) =>
             item.key === entry.key

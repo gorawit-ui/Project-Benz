@@ -11,6 +11,13 @@ import { listExpenseRows, updateExpenseRowReceiptDocLink } from "@/lib/sheets";
 // generated เอกสารรับเงิน gets uploaded into, so it can be found again later.
 const RECEIPT_DOC_DRIVE_FOLDER = "เอกสารรับเงิน";
 
+/**
+ * PDF generation plus a Drive upload, a Sheets write-back and (for cash
+ * bills) two more Drive copies runs past Vercel's 10s default. 60s is the
+ * Hobby-plan ceiling.
+ */
+export const maxDuration = 60;
+
 function sanitizeForFilename(value: string): string {
   return value.replace(/[\\/:*?"<>|]/g, "_").trim() || "receipt-doc";
 }

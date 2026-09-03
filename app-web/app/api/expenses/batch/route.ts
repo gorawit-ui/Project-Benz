@@ -12,6 +12,14 @@ import {
   type FundType,
 } from "@/lib/sheets";
 import { findDuplicateExpense } from "@/lib/duplicateCheck";
+
+/**
+ * Every item costs at least two sequential Sheets round-trips (an ID scan
+ * across the month tabs, then the append), so a full 20-bill batch runs well
+ * past Vercel's 10s default and died with the whole batch unsaved — after the
+ * user had already reviewed all 20. 60s is the Hobby-plan ceiling.
+ */
+export const maxDuration = 60;
 import { monthLabelForBillDate } from "@/lib/month";
 
 const REQUIRED_FIELDS = ["fundType", "documentType", "documentNumber", "billDate", "supplierNameTh", "expenseDetail", "odooCategory", "grandTotal", "receiptFileLink"] as const;
