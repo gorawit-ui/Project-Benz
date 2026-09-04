@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { DocumentType, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
 import { runWithConcurrency } from "@/lib/concurrency";
-import { prepareImageForOcr } from "@/lib/imageForOcr";
-import { ocrFailureMessage, ocrHttpErrorMessage } from "@/lib/ocrErrorMessage";
+import { requestOcr } from "@/lib/ocrClient";
 import { ActionButton, PageShell, SectionHeading, Surface } from "./ui";
 import OcrProgressOverlay from "./OcrProgressOverlay";
 import SuccessDialog from "./SuccessDialog";
@@ -16,16 +15,21 @@ const DOCUMENT_TYPES: DocumentType[] = ["ใบเสร็จรับเงิ
 const VAT_RATE = 0.07;
 // Firing OCR for every file in parallel meant a full 20-file batch sent 20
 // simultaneous Gemini requests. The Gemini free tier's binding limit is
-// requests-per-minute (~10 RPM), not how many are in flight at once — so
-// concurrency alone (even limit: 1) doesn't guarantee staying under it if
-// each call happens to resolve quickly. One file at a time, at least
-// OCR_MIN_INTERVAL_MS apart, keeps a full 20-file batch safely under that
-// ceiling regardless of how fast Gemini responds. See lib/concurrency.ts's
+// requests-per-minute, not how many are in flight at once — so concurrency
+// alone (even limit: 1) doesn't guarantee staying under it if each call
+// happens to resolve quickly. One file at a time, at least
+// OCR_MIN_INTERVAL_MS apart, keeps a full batch under that ceiling
+// regardless of how fast Gemini responds. See lib/concurrency.ts's
 // minIntervalMs — it only adds a wait when a call finishes faster than this
 // floor, so a naturally slower call (a big PDF, a busy moment) isn't padded
 // further.
+//
+// This project's measured free-tier ceiling is 5 RPM, not the ~10 RPM an
+// earlier comment here claimed, so the floor is 15s (4 RPM) to keep a
+// margin under it. A large batch is therefore slow by design — partial
+// submit (below) exists so nobody has to wait for all of it.
 const OCR_CONCURRENCY = 1;
-const OCR_MIN_INTERVAL_MS = 7000; // ~8.6 requests/min, under the ~10 RPM free-tier cap with margin
+const OCR_MIN_INTERVAL_MS = 15_000; // 4 requests/min, under the 5 RPM free-tier cap
 
 type FormState = {
   fundType: FundType;
@@ -97,6 +101,23 @@ function isEntryComplete(entry: Entry) {
   );
 }
 
+/**
+ * An entry can be saved when its fields are complete AND its read has
+ * settled. A still-loading entry is excluded even if OCR already filled
+ * enough to look complete: its own response could still overwrite the very
+ * values being submitted.
+ */
+export function isEntryReady(entry: Entry): boolean {
+  return entry.ocrState !== "loading" && isEntryComplete(entry);
+}
+
+/**
+ * The batch endpoint applies the multi-file auto-approval policy, which is
+ * defined for 2+ bills. Submitting a lone bill through it would auto-approve
+ * something reviewed by nobody but its author.
+ */
+const MIN_BATCH_SUBMIT = 2;
+
 function ocrPatch(data: ExtractedReceiptData): Partial<FormState> {
   const patch: Partial<FormState> = {};
   if (data.documentType) patch.documentType = data.documentType;
@@ -152,51 +173,59 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState<number | null>(null);
+  // How many entries were still on the page after the last save — decides
+  // whether this was a partial save (stay here) or the last one (go to the
+  // dashboard).
+  const [remainingAfterSave, setRemainingAfterSave] = useState(0);
   // A batch whose reads keep hitting an overloaded Gemini is retried with
   // backoff per file, so the overlay can legitimately stay up for minutes on
   // a large batch. Let it be dismissed — reading carries on behind it, and
   // every entry is editable anyway.
   const [ocrOverlayDismissed, setOcrOverlayDismissed] = useState(false);
+  // Keys of entries already written to the Sheet by a partial submit. A read
+  // that was still in flight when its entry was saved must not land on it
+  // afterwards: the row is committed, so re-filling the form from a late OCR
+  // response would show data that no longer matches what was stored. Held in
+  // a ref because the OCR workers close over it and must see every update.
+  const savedKeysRef = useRef<Set<string>>(new Set());
+
+  /** Reads one entry and folds the result into its own row. Never throws. */
+  const runEntryOcr = useCallback(async (entry: Entry) => {
+    try {
+      const data = await requestOcr(entry.file);
+      if (savedKeysRef.current.has(entry.key)) return;
+      setEntries((current) => current.map((item) =>
+        item.key === entry.key
+          ? {
+              ...item,
+              form: { ...item.form, ...ocrPatch(data) },
+              ocrState: data.confidence === "low" ? "warning" : "done",
+              ocrText: data.confidence === "low" ? "อ่านได้ไม่ชัด กรุณาตรวจทานก่อนบันทึก" : "OCR อ่านข้อมูลแล้ว กรุณาตรวจทานและแก้ไขได้",
+            }
+          : item
+      ));
+    } catch (cause) {
+      if (savedKeysRef.current.has(entry.key)) return;
+      setEntries((current) => current.map((item) =>
+        item.key === entry.key
+          ? { ...item, ocrState: "warning", ocrText: cause instanceof Error ? cause.message : "อ่านข้อมูลไม่ได้ — กรอกข้อมูลเองได้" }
+          : item
+      ));
+    }
+  }, []);
+
+  /** Re-reads a single entry after a failed or unclear first pass. */
+  function retryEntryOcr(key: string) {
+    const entry = entries.find((item) => item.key === key);
+    if (!entry) return;
+    setEntries((current) => current.map((item) =>
+      item.key === key ? { ...item, ocrState: "loading", ocrText: "กำลังอ่านข้อมูลจากเอกสาร..." } : item
+    ));
+    void runEntryOcr(entry);
+  }
 
   useEffect(() => {
-    // Same per-file request and state transitions as before — only the
-    // pacing changed, from "all at once" to one file every
-    // OCR_MIN_INTERVAL_MS (see the constants above for why).
-    void runWithConcurrency(
-      entries,
-      OCR_CONCURRENCY,
-      async (entry) => {
-        try {
-          const payload = new FormData();
-          // Only the OCR copy is shrunk — entry.file (the original) is what
-          // still goes to Drive on submit. See lib/imageForOcr.ts.
-          payload.append("file", await prepareImageForOcr(entry.file));
-          const res = await fetch("/api/ocr", { method: "POST", body: payload });
-          const json = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(json.error || ocrHttpErrorMessage(res.status));
-          const failure = json.failure as { code: string; detail: string; status?: number } | undefined;
-          if (failure) throw new Error(ocrFailureMessage(failure.code, failure.detail, failure.status));
-          const data = (json.data ?? {}) as ExtractedReceiptData;
-          setEntries((current) => current.map((item) =>
-            item.key === entry.key
-              ? {
-                  ...item,
-                  form: { ...item.form, ...ocrPatch(data) },
-                  ocrState: data.confidence === "low" ? "warning" : "done",
-                  ocrText: data.confidence === "low" ? "อ่านได้ไม่ชัด กรุณาตรวจทานก่อนบันทึก" : "OCR อ่านข้อมูลแล้ว กรุณาตรวจทานและแก้ไขได้",
-                }
-              : item
-          ));
-        } catch (cause) {
-          setEntries((current) => current.map((item) =>
-            item.key === entry.key
-              ? { ...item, ocrState: "warning", ocrText: cause instanceof Error ? cause.message + " — กรอกข้อมูลเองได้" : "อ่านข้อมูลไม่ได้ — กรอกข้อมูลเองได้" }
-              : item
-          ));
-        }
-      },
-      { minIntervalMs: OCR_MIN_INTERVAL_MS }
-    );
+    void runWithConcurrency(entries, OCR_CONCURRENCY, runEntryOcr, { minIntervalMs: OCR_MIN_INTERVAL_MS });
     // files are fixed when entering this page; each entry must be OCR'd once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -249,17 +278,40 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
     return String(json.webViewLink || "");
   }
 
+  /**
+   * Saves the entries that are ready, and only those.
+   *
+   * A 20-file batch reads one file at a time (see OCR_MIN_INTERVAL_MS), so
+   * insisting every entry be finished before anything could be saved left a
+   * user who had reviewed 3 bills unable to submit any of them while the
+   * other 17 were still reading or had timed out. Ready entries go now; the
+   * rest stay on screen with their reads still running.
+   *
+   * Incomplete or still-loading entries are never uploaded — a Drive file
+   * with no Sheet row behind it is exactly the orphan this avoids.
+   */
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+
+    const ready = entries.filter(isEntryReady);
+    // The batch endpoint carries the multi-file auto-approval policy, so it
+    // needs at least the 2 bills that policy is defined for. One ready bill
+    // waits for a second rather than going through as an auto-approved
+    // single — that would approve a bill nobody else reviewed.
+    if (ready.length < MIN_BATCH_SUBMIT) {
+      setError(`ต้องมีบิลที่ตรวจครบอย่างน้อย ${MIN_BATCH_SUBMIT} ใบจึงจะบันทึกได้ (ตอนนี้พร้อม ${ready.length} ใบ)`);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const receiptFileLinks = await Promise.all(entries.map(upload));
+      const receiptFileLinks = await Promise.all(ready.map(upload));
       const res = await fetch("/api/expenses/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: entries.map((entry, index) => ({
+          items: ready.map((entry, index) => ({
             ...entry.form,
             amountBeforeVat: entry.form.hasVat ? Number(entry.form.amountBeforeVat) : Number(entry.form.grandTotal),
             vatAmount: entry.form.hasVat ? Number(entry.form.vatAmount) : 0,
@@ -270,7 +322,15 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "บันทึกชุดเอกสารไม่สำเร็จ");
-      setSavedCount(Number(json.rows?.length) || entries.length);
+
+      // The endpoint is all-or-nothing, so a 2xx means every submitted entry
+      // is now a row. Drop exactly those and keep the rest reading.
+      const savedKeys = new Set(ready.map((entry) => entry.key));
+      savedKeys.forEach((key) => savedKeysRef.current.add(key));
+      const remaining = entries.filter((entry) => !savedKeys.has(entry.key));
+      setEntries(remaining);
+      setSavedCount(ready.length);
+      setRemainingAfterSave(remaining.length);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "บันทึกชุดเอกสารไม่สำเร็จ");
     } finally {
@@ -280,9 +340,14 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
 
   const inputClass = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
   const labelClass = "block text-xs font-semibold text-slate-700";
-  const completeCount = entries.filter(isEntryComplete).length;
-  const incompleteCount = entries.length - completeCount;
-  const batchTotal = entries.reduce((sum, entry) => sum + (Number(entry.form.grandTotal) || 0), 0);
+  // "Ready" is what the save button acts on: complete AND finished reading.
+  // notReadyCount therefore covers both "still reading" and "needs review",
+  // which are the two reasons an entry cannot go yet.
+  const readyCount = entries.filter(isEntryReady).length;
+  const notReadyCount = entries.length - readyCount;
+  const stillReadingCount = entries.filter((entry) => entry.ocrState === "loading").length;
+  const canSubmit = readyCount >= MIN_BATCH_SUBMIT;
+  const readyTotal = entries.filter(isEntryReady).reduce((sum, entry) => sum + (Number(entry.form.grandTotal) || 0), 0);
   const ocrCompletedCount = entries.filter((entry) => entry.ocrState !== "loading").length;
   const ocrCurrentFile = entries.find((entry) => entry.ocrState === "loading")?.file.name;
 
@@ -302,9 +367,20 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
             <div className={`mb-3 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${isEntryComplete(entry) ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
               {isEntryComplete(entry) ? "พร้อมบันทึก" : "ยังมีข้อมูลที่ต้องตรวจ"}
             </div>
-            <p className={"mt-3 rounded-lg px-3 py-2 text-xs " + (entry.ocrState === "done" ? "bg-emerald-50 text-emerald-800" : entry.ocrState === "loading" ? "bg-sky-50 text-sky-800" : "bg-amber-50 text-amber-900")}>
-              {entry.ocrState === "loading" ? "กำลัง OCR..." : entry.ocrState === "done" ? "OCR สำเร็จ — ตรวจข้อมูลก่อนส่ง" : "OCR ต้องตรวจทานเพิ่มเติม — ยังแก้ไขและส่งได้"}
-            </p>
+            <div className={"mt-3 rounded-lg px-3 py-2 text-xs " + (entry.ocrState === "done" ? "bg-emerald-50 text-emerald-800" : entry.ocrState === "loading" ? "bg-sky-50 text-sky-800" : "bg-amber-50 text-amber-900")}>
+              <p>{entry.ocrState === "loading" ? "กำลัง OCR..." : entry.ocrState === "done" ? "OCR สำเร็จ — ตรวจข้อมูลก่อนส่ง" : entry.ocrText}</p>
+              {/* A timed-out or overloaded read is worth another go on this
+                  one file, without re-reading the whole batch. */}
+              {entry.ocrState === "warning" && (
+                <button
+                  type="button"
+                  onClick={() => retryEntryOcr(entry.key)}
+                  className="mt-2 rounded-md border border-current px-2.5 py-1 font-semibold hover:bg-white/60"
+                >
+                  อ่านใหม่อีกครั้ง
+                </button>
+              )}
+            </div>
 
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className={labelClass}>ประเภทเอกสาร
@@ -394,25 +470,50 @@ export default function BatchExpenseForm({ files }: { files: File[] }) {
         <div className="sticky bottom-3 z-20 rounded-2xl border border-[var(--line)] bg-white/95 p-3 shadow-xl backdrop-blur sm:static sm:shadow-sm">
           <div className="mb-3 flex items-center justify-between gap-3 text-sm">
             <div>
-              <p className="font-semibold text-[var(--ink)]">ตรวจครบแล้ว {completeCount}/{entries.length} บิล</p>
-              <p className="mt-0.5 text-xs text-[var(--muted)]">ยอดรวมโดยประมาณ ฿{batchTotal.toLocaleString("th-TH", { maximumFractionDigits: 2 })}</p>
+              <p className="font-semibold text-[var(--ink)]">พร้อมบันทึก {readyCount} จาก {entries.length} บิล</p>
+              <p className="mt-0.5 text-xs text-[var(--muted)]">ยอดรวมของบิลที่พร้อม ฿{readyTotal.toLocaleString("th-TH", { maximumFractionDigits: 2 })}</p>
             </div>
-            {incompleteCount > 0 && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">เหลือ {incompleteCount} บิล</span>}
+            {notReadyCount > 0 && (
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">
+                {stillReadingCount > 0 ? `กำลังอ่าน ${stillReadingCount} ใบ` : `รอตรวจ ${notReadyCount} ใบ`}
+              </span>
+            )}
           </div>
-          <ActionButton type="submit" disabled={submitting || incompleteCount > 0 || entries.some((entry) => entry.ocrState === "loading")} className="w-full">
-            {submitting ? "กำลังอัปโหลดและบันทึก..." : incompleteCount > 0 ? `ตรวจข้อมูลให้ครบอีก ${incompleteCount} บิล` : "บันทึกทั้งหมดและผ่านอัตโนมัติ"}
+          <ActionButton type="submit" disabled={submitting || !canSubmit} className="w-full">
+            {submitting
+              ? "กำลังอัปโหลดและบันทึก..."
+              : canSubmit
+                ? `บันทึก ${readyCount} บิลที่พร้อม และผ่านอัตโนมัติ`
+                : `ต้องมีบิลที่ตรวจครบอย่างน้อย ${MIN_BATCH_SUBMIT} ใบ (พร้อม ${readyCount} ใบ)`}
           </ActionButton>
+          {notReadyCount > 0 && canSubmit && (
+            <p className="mt-2 text-center text-xs text-[var(--muted)]">
+              บิลที่ยังไม่พร้อมอีก {notReadyCount} ใบจะยังอยู่ในหน้านี้ ให้ตรวจและส่งต่อได้
+            </p>
+          )}
         </div>
       </form>
 
       {savedCount !== null && (
-        <SuccessDialog
-          title="บันทึกสำเร็จแล้ว"
-          detail={"อัปโหลดและบันทึก " + savedCount + " บิลลง Google Sheet แล้ว สถานะเป็น “ตรวจแล้ว” กำลังพาไปหน้า Dashboard"}
-          primaryLabel="ไปที่ Dashboard ตอนนี้"
-          onPrimary={() => router.push("/dashboard")}
-          autoRedirectSeconds={2}
-        />
+        // Only leave the page once nothing is left to review — redirecting
+        // after a partial save would strand the bills still on screen.
+        remainingAfterSave > 0 ? (
+          <SuccessDialog
+            title="บันทึกสำเร็จแล้ว"
+            detail={`บันทึก ${savedCount} บิลแล้ว สถานะเป็น “ตรวจแล้ว” ส่วนที่เหลือยังอยู่ในหน้านี้เพื่อให้ตรวจและส่งต่อได้`}
+            primaryLabel="ตรวจบิลที่เหลือต่อ"
+            onPrimary={() => setSavedCount(null)}
+            onClose={() => setSavedCount(null)}
+          />
+        ) : (
+          <SuccessDialog
+            title="บันทึกสำเร็จแล้ว"
+            detail={`อัปโหลดและบันทึก ${savedCount} บิลลง Google Sheet แล้ว สถานะเป็น “ตรวจแล้ว” กำลังพาไปหน้า Dashboard`}
+            primaryLabel="ไปที่ Dashboard ตอนนี้"
+            onPrimary={() => router.push("/dashboard")}
+            autoRedirectSeconds={2}
+          />
+        )
       )}
     </PageShell>
     {ocrCompletedCount < entries.length && !ocrOverlayDismissed && (

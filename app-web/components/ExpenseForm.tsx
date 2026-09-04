@@ -6,8 +6,7 @@ import type { DocumentType, ExpenseRow, FundType } from "@/lib/sheets";
 import type { ExtractedReceiptData } from "@/lib/ocr";
 import { findDuplicateExpense } from "@/lib/duplicateCheck";
 import { CATEGORY_OPTIONS, ACC_NAME_OPTIONS, getAccNameForCategory, matchCategoryAndAccName } from "@/lib/categoryMapping";
-import { prepareImageForOcr } from "@/lib/imageForOcr";
-import { ocrFailureMessage, ocrHttpErrorMessage } from "@/lib/ocrErrorMessage";
+import { requestOcr } from "@/lib/ocrClient";
 import ComboBox from "./ComboBox";
 import { ActionButton, SectionHeading } from "./ui";
 import BilliMascot from "./BilliMascot";
@@ -346,23 +345,10 @@ export default function ExpenseForm({
     setOcrOverlayDismissed(false); // a fresh read gets the overlay again, even after a dismissed one
     setOcrMessage(null);
     try {
-      const body = new FormData();
-      // Only the OCR copy is shrunk — receiptFile (the original) is what
-      // still goes to Drive on submit. See lib/imageForOcr.ts.
-      body.append("file", await prepareImageForOcr(file));
-      const res = await fetch("/api/ocr", { method: "POST", body });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(json.error || ocrHttpErrorMessage(res.status));
-      }
-      const data = (json.data ?? {}) as ExtractedReceiptData;
-      const failure = json.failure as { code: string; detail: string; status?: number } | undefined;
+      // Shared with the multi-file flow (lib/ocrClient.ts): same shrink, same
+      // 55s abort just under the route's own limit, same error wording.
+      const data = await requestOcr(file);
       applyExtractedData(data);
-      if (failure) {
-        // The read failed outright — saying "อ่านข้อมูลแล้ว" over an empty
-        // form is how a completely broken OCR call stayed invisible.
-        throw new Error(ocrFailureMessage(failure.code, failure.detail, failure.status));
-      }
       const filledCount = Object.keys(data).filter((key) => key !== "confidence").length;
       setOcrMessage(
         filledCount === 0
